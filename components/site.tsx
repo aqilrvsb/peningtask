@@ -3,12 +3,31 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-export function Logo() {
+export function LogoMark({ size = 32 }: { size?: number }) {
   return (
-    <Link href="/" className="flex items-center gap-2 font-extrabold text-lg">
-      <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500 text-white">
-        T
-      </span>
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden>
+      <defs>
+        <linearGradient id="tk" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#22c55e" />
+          <stop offset="1" stopColor="#15803d" />
+        </linearGradient>
+      </defs>
+      <rect width="40" height="40" rx="11" fill="url(#tk)" />
+      <path
+        d="M12 20.5l5 5 11-11.5"
+        stroke="white"
+        strokeWidth="3.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function Logo({ size = 32 }: { size?: number }) {
+  return (
+    <Link href="/" className="flex items-center gap-2 text-lg font-extrabold tracking-tight">
+      <LogoMark size={size} />
       <span>
         Tugas<span className="text-brand-500">Ku</span>
       </span>

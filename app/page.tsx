@@ -2,12 +2,11 @@ import Link from "next/link";
 import { Nav, Footer } from "@/components/site";
 
 const PLATFORMS = [
+  { key: "facebook", name: "Facebook", from: "RM 1.00", emoji: "👍" },
+  { key: "threads", name: "Threads", from: "RM 0.60", emoji: "🧵" },
   { key: "tiktok", name: "TikTok", from: "RM 0.60", emoji: "🎵" },
   { key: "instagram", name: "Instagram", from: "RM 0.60", emoji: "📸" },
-  { key: "facebook", name: "Facebook", from: "RM 1.00", emoji: "👍" },
-  { key: "youtube", name: "YouTube", from: "RM 1.00", emoji: "▶️" },
-  { key: "threads", name: "Threads", from: "RM 0.60", emoji: "🧵" },
-  { key: "twitter", name: "Twitter / X", from: "RM 1.00", emoji: "𝕏" },
+  { key: "ai", name: "AI Task", from: "Ganjaran RM", emoji: "🤖" },
 ];
 
 const STEPS = [
