@@ -13,7 +13,7 @@ type Stats = {
   pending_withdrawals: number;
   wallet_total: number;
 };
-type Sub = { id: number; task_id: number; user_id: string; proof: string | null; status: string; created_at: string };
+type Sub = { id: number; task_id: number; user_id: string; proof: string | null; proof_url: string | null; status: string; created_at: string };
 type Wd = { id: number; user_id: string; amount: number; method: string | null; status: string; created_at: string };
 type User = { id: string; full_name: string | null; whatsapp: string | null; wallet_balance: number; role: string };
 
@@ -42,7 +42,12 @@ export default function Admin() {
   const [action, setAction] = useState("Follow akaun");
   const [reward, setReward] = useState(0.1);
   const [count, setCount] = useState(50);
+  const [targetUrl, setTargetUrl] = useState("");
+  const [proofTypes, setProofTypes] = useState<string[]>(["image"]);
   const [busy, setBusy] = useState(false);
+
+  const toggleProof = (p: string) =>
+    setProofTypes((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
 
   const flash = (m: string) => {
     setToast(m);
@@ -80,6 +85,10 @@ export default function Admin() {
 
   async function createTasks() {
     if (!supabase) return;
+    if (proofTypes.length === 0) {
+      flash("⚠️ Pilih sekurang-kurangnya satu jenis bukti");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.rpc("admin_create_tasks", {
       p_platform: platform,
@@ -87,6 +96,8 @@ export default function Admin() {
       p_action: action,
       p_reward: reward,
       p_count: count,
+      p_proof_types: proofTypes,
+      p_target_url: targetUrl || null,
     });
     setBusy(false);
     if (error) flash("❌ " + error.message);
@@ -222,6 +233,36 @@ export default function Admin() {
                 <input value={action} onChange={(e) => setAction(e.target.value)} placeholder="cth: Follow & like 3 post" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
               )}
 
+              <label className="mt-4 block text-sm font-medium">Link sasaran (akaun/post untuk pengguna buka)</label>
+              <input
+                value={targetUrl}
+                onChange={(e) => setTargetUrl(e.target.value)}
+                placeholder="https://www.tiktok.com/@akaun"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950"
+              />
+
+              <label className="mt-4 block text-sm font-medium">Jenis bukti diperlukan</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  { k: "image", l: "📷 Gambar" },
+                  { k: "video", l: "🎬 Video" },
+                  { k: "link", l: "🔗 Link/Username" },
+                ].map((p) => (
+                  <button
+                    key={p.k}
+                    type="button"
+                    onClick={() => toggleProof(p.k)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+                      proofTypes.includes(p.k)
+                        ? "bg-brand-500 text-white"
+                        : "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                    }`}
+                  >
+                    {p.l}
+                  </button>
+                ))}
+              </div>
+
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium">Ganjaran (RM)</label>
@@ -242,19 +283,36 @@ export default function Admin() {
           {tab === "Submissions" && (
             <div className="space-y-3">
               {subs.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 dark:border-slate-700">Tiada submission menunggu ✅</p>}
-              {subs.map((s) => (
-                <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <div>
-                    <p className="font-semibold">Tugasan #{s.task_id}</p>
-                    <p className="text-sm text-slate-500">Bukti: {s.proof || "—"}</p>
-                    <p className="text-xs text-slate-400">User {s.user_id.slice(0, 8)}…</p>
+              {subs.map((s) => {
+                const isVideo = s.proof_url ? /\.(mp4|webm|mov|m4v)($|\?)/i.test(s.proof_url) : false;
+                return (
+                  <div key={s.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">Tugasan #{s.task_id}</p>
+                        {s.proof && <p className="text-sm text-slate-500">🔗 Bukti teks: {s.proof}</p>}
+                        <p className="text-xs text-slate-400">User {s.user_id.slice(0, 8)}… · {new Date(s.created_at).toLocaleString("ms-MY")}</p>
+                        {s.proof_url && (
+                          <div className="mt-3">
+                            {isVideo ? (
+                              <video src={s.proof_url} controls className="max-h-56 rounded-xl border border-slate-200 dark:border-slate-700" />
+                            ) : (
+                              <a href={s.proof_url} target="_blank">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={s.proof_url} alt="Bukti" className="max-h-56 rounded-xl border border-slate-200 object-contain dark:border-slate-700" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => approve(s.id)} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Lulus</button>
+                        <button onClick={() => reject(s.id)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Tolak</button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => approve(s.id)} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Lulus</button>
-                    <button onClick={() => reject(s.id)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Tolak</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

@@ -63,7 +63,8 @@ const NAV = [
   { href: "/", label: "Utama" },
   { href: "/marketplace", label: "Marketplace" },
   { href: "/untuk-bisnes", label: "Untuk Bisnes" },
-  { href: "/#cara", label: "Cara Berfungsi" },
+  { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/blog", label: "Blog" },
   { href: "/#faq", label: "Soalan Lazim" },
 ];
 

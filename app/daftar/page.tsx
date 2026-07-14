@@ -22,11 +22,15 @@ export default function RegisterPage() {
     }
     setLoading(true);
     const supabase = createClient();
+    let ref = "";
+    try {
+      ref = localStorage.getItem("tk_ref") ?? "";
+    } catch {}
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: name, whatsapp },
+        data: { full_name: name, whatsapp, ref },
         emailRedirectTo: `${window.location.origin}/dashboard`,
       },
     });
