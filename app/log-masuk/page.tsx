@@ -26,18 +26,6 @@ export default function LoginPage() {
     else window.location.href = "/dashboard";
   }
 
-  async function loginGoogle() {
-    if (!hasSupabase) {
-      setMsg("Supabase belum disambung. Google login akan aktif selepas env & OAuth ditetapkan.");
-      return;
-    }
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
-    });
-  }
-
   return (
     <div className="grid min-h-screen place-items-center bg-slate-50 px-4 dark:bg-slate-950">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -49,20 +37,7 @@ export default function LoginPage() {
           Selamat kembali ke TugasKu 👋
         </p>
 
-        <button
-          onClick={loginGoogle}
-          className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 py-3 font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          <span className="text-lg">🔵</span> Teruskan dengan Google
-        </button>
-
-        <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
-          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-          ATAU
-          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-        </div>
-
-        <form onSubmit={loginEmail} className="space-y-3">
+        <form onSubmit={loginEmail} className="mt-6 space-y-3">
           <input
             type="email"
             required

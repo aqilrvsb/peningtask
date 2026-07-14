@@ -8,6 +8,7 @@ import { createClient, hasSupabase } from "@/lib/supabase";
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,29 +22,25 @@ export default function RegisterPage() {
     }
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: name },
+        data: { full_name: name, whatsapp },
         emailRedirectTo: `${window.location.origin}/dashboard`,
       },
     });
     setLoading(false);
-    if (error) setMsg(error.message);
-    else setMsg("Berjaya! Semak emel anda untuk pengesahan.");
-  }
-
-  async function googleSignup() {
-    if (!hasSupabase) {
-      setMsg("Supabase belum disambung. Google akan aktif selepas env & OAuth ditetapkan.");
+    if (error) {
+      setMsg(error.message);
       return;
     }
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
-    });
+    // Bila email verification dimatikan, session terus wujud → masuk dashboard.
+    if (data.session) {
+      window.location.href = "/dashboard";
+    } else {
+      setMsg("Akaun berjaya dicipta! Sila log masuk.");
+    }
   }
 
   return (
@@ -57,20 +54,7 @@ export default function RegisterPage() {
           Mula buat tugasan atau naikkan sosial anda hari ini.
         </p>
 
-        <button
-          onClick={googleSignup}
-          className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 py-3 font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          <span className="text-lg">🔵</span> Daftar dengan Google
-        </button>
-
-        <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
-          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-          ATAU
-          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-        </div>
-
-        <form onSubmit={register} className="space-y-3">
+        <form onSubmit={register} className="mt-6 space-y-3">
           <input
             required
             placeholder="Nama penuh"
@@ -84,6 +68,15 @@ export default function RegisterPage() {
             placeholder="Emel"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-950"
+          />
+          <input
+            type="tel"
+            required
+            inputMode="numeric"
+            placeholder="No. WhatsApp (cth: 60123456789)"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-950"
           />
           <input
