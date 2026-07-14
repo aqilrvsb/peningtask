@@ -52,8 +52,9 @@ export default function Home() {
       <Nav />
 
       {/* HERO */}
-      <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-6xl px-4 py-20 text-center">
+      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 via-white to-white dark:from-brand-500/10 dark:via-slate-950 dark:to-slate-950">
+        <div className="pointer-events-none absolute left-1/2 top-0 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-brand-200/50 blur-3xl dark:bg-brand-500/20" />
+        <div className="relative mx-auto max-w-6xl px-4 py-20 text-center">
           <span className="inline-block rounded-full bg-brand-50 px-4 py-1.5 text-sm font-semibold text-brand-600 dark:bg-brand-500/10">
             Komuniti tugasan &amp; engagement Malaysia
           </span>
