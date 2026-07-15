@@ -25,6 +25,8 @@ type Task = {
   reward: number;
   proof_types: string[];
   target_url: string | null;
+  vendor_name: string | null;
+  vendor_logo: string | null;
 };
 type Campaign = { id: number; platform: string; service_type: string; quantity: number; delivered: number; status: string };
 type Txn = { id: number; amount: number; kind: string; note: string | null; created_at: string };
@@ -92,7 +94,7 @@ export default function Dashboard() {
     const uid = auth.user.id;
     const [p, t, c, w, wd, nf] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", uid).single(),
-      supabase.from("tasks").select("id,platform,action,reward,proof_types,target_url").eq("status", "open").limit(50),
+      supabase.rpc("open_tasks"),
       supabase.from("campaigns").select("id,platform,service_type,quantity,delivered,status").eq("owner", uid).order("created_at", { ascending: false }),
       supabase.from("wallet_transactions").select("id,amount,kind,note,created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(20),
       supabase.from("withdrawals").select("id,amount,method,status,created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(10),
@@ -251,6 +253,11 @@ export default function Dashboard() {
                 Admin
               </Link>
             )}
+            {(profile?.role === "vendor" || profile?.role === "admin") && (
+              <Link href="/vendor" className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600">
+                📣 Vendor
+              </Link>
+            )}
             {/* notifications bell */}
             <div className="relative">
               <button onClick={openNotif} aria-label="Notifikasi" className="relative grid h-9 w-9 place-items-center rounded-lg border border-slate-200 dark:border-slate-700">
@@ -394,12 +401,19 @@ export default function Dashboard() {
                     {shownTasks.map((t) => (
                       <div key={t.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-brand-200 dark:border-slate-800 dark:bg-slate-900">
                         <div className="flex items-center gap-3">
-                          <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-xl dark:bg-slate-800">
-                            {EMOJI[t.platform] ?? "⭐"}
-                          </span>
+                          {t.vendor_logo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={t.vendor_logo} alt={t.vendor_name ?? "Vendor"} className="h-11 w-11 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
+                          ) : (
+                            <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-xl dark:bg-slate-800">
+                              {EMOJI[t.platform] ?? "⭐"}
+                            </span>
+                          )}
                           <div>
                             <p className="font-semibold">{t.action}</p>
-                            <p className="text-sm text-slate-500">{t.platform} · +10 XP</p>
+                            <p className="text-sm text-slate-500">
+                              {EMOJI[t.platform] ?? ""} {t.platform} · oleh <b>{t.vendor_name ?? "TugasKu"}</b> · +10 XP
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -575,13 +589,20 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setActiveTask(null)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-6 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-bold">
-                  {EMOJI[activeTask.platform] ?? "⭐"} {activeTask.action}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {activeTask.platform} · Ganjaran <b className="text-brand-500">{rm(activeTask.reward)}</b> · +10 XP
-                </p>
+              <div className="flex items-start gap-3">
+                {activeTask.vendor_logo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={activeTask.vendor_logo} alt="" className="h-12 w-12 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
+                )}
+                <div>
+                  <h3 className="text-lg font-bold">
+                    {EMOJI[activeTask.platform] ?? "⭐"} {activeTask.action}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    oleh <b>{activeTask.vendor_name ?? "TugasKu"}</b> · {activeTask.platform} · Ganjaran{" "}
+                    <b className="text-brand-500">{rm(activeTask.reward)}</b> · +10 XP
+                  </p>
+                </div>
               </div>
               <button onClick={() => setActiveTask(null)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>

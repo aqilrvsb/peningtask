@@ -10,6 +10,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
+  const [accountType, setAccountType] = useState<"user" | "vendor">("user");
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,7 +31,7 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        data: { full_name: name, whatsapp, ref },
+        data: { full_name: name, whatsapp, ref, account_type: accountType },
         emailRedirectTo: `${window.location.origin}/dashboard`,
       },
     });
@@ -58,7 +59,36 @@ export default function RegisterPage() {
           Mula buat tugasan atau naikkan sosial anda hari ini.
         </p>
 
-        <form onSubmit={register} className="mt-6 space-y-3">
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setAccountType("user")}
+            className={`rounded-xl border-2 p-3 text-left transition ${
+              accountType === "user"
+                ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
+                : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+            }`}
+          >
+            <p className="text-lg">💸</p>
+            <p className="mt-1 text-sm font-bold">Buat Tugasan</p>
+            <p className="text-xs text-slate-500">Jana pendapatan sampingan</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAccountType("vendor")}
+            className={`rounded-xl border-2 p-3 text-left transition ${
+              accountType === "vendor"
+                ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
+                : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+            }`}
+          >
+            <p className="text-lg">📣</p>
+            <p className="mt-1 text-sm font-bold">Vendor / Bisnes</p>
+            <p className="text-xs text-slate-500">Lancar kempen engagement</p>
+          </button>
+        </div>
+
+        <form onSubmit={register} className="mt-4 space-y-3">
           <input
             required
             placeholder="Nama penuh"

@@ -16,6 +16,7 @@ type Stats = {
 type Sub = { id: number; task_id: number; user_id: string; proof: string | null; proof_url: string | null; status: string; created_at: string };
 type Wd = { id: number; user_id: string; amount: number; method: string | null; status: string; created_at: string };
 type User = { id: string; full_name: string | null; whatsapp: string | null; wallet_balance: number; role: string };
+type Plat = { total_fees: number; total_vendors: number; active_campaigns: number; escrow_held: number };
 
 const TABS = ["Ringkasan", "Cipta Tugasan", "Submissions", "Pengeluaran", "Pengguna"] as const;
 type Tab = (typeof TABS)[number];
@@ -32,6 +33,7 @@ export default function Admin() {
   const [ok, setOk] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab>("Ringkasan");
   const [stats, setStats] = useState<Stats | null>(null);
+  const [plat, setPlat] = useState<Plat | null>(null);
   const [subs, setSubs] = useState<Sub[]>([]);
   const [wds, setWds] = useState<Wd[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -67,16 +69,19 @@ export default function Admin() {
       return;
     }
     setOk(true);
-    const [st, sb, wd, us] = await Promise.all([
+    const [st, sb, wd, us, pf] = await Promise.all([
       supabase.rpc("admin_stats"),
       supabase.from("submissions").select("*").eq("status", "pending").order("created_at", { ascending: false }),
       supabase.from("withdrawals").select("*").eq("status", "requested").order("created_at", { ascending: false }),
       supabase.from("profiles").select("id,full_name,whatsapp,wallet_balance,role").order("created_at", { ascending: false }).limit(100),
+      supabase.rpc("platform_stats"),
     ]);
     setStats((st.data as Stats) ?? null);
     setSubs((sb.data as Sub[]) ?? []);
     setWds((wd.data as Wd[]) ?? []);
     setUsers((us.data as User[]) ?? []);
+    const p = Array.isArray(pf.data) ? pf.data[0] : pf.data;
+    setPlat((p as Plat) ?? null);
   }, [supabase]);
 
   useEffect(() => {
@@ -119,6 +124,16 @@ export default function Admin() {
     flash(error ? "❌ " + error.message : "↩️ Ditolak, tugasan dibuka semula");
     load();
   }
+  async function setRole(id: string, role: "user" | "vendor") {
+    if (!supabase) return;
+    const { error } = await supabase.rpc("admin_set_role", { p_user: id, p_role: role });
+    if (error) flash("❌ " + error.message);
+    else {
+      flash(role === "vendor" ? "✅ Dinaik taraf ke Vendor" : "✅ Ditukar ke Pengguna");
+      load();
+    }
+  }
+
   async function processWd(id: number, approve: boolean) {
     if (!supabase) return;
     const { error } = await supabase.rpc("process_withdrawal", { p_id: id, p_approve: approve });
@@ -170,8 +185,11 @@ export default function Admin() {
             { l: "Submission Baru", v: stats?.pending_subs ?? 0, hot: true },
             { l: "Withdraw Baru", v: stats?.pending_withdrawals ?? 0, hot: true },
             { l: "Jumlah Wallet", v: rm(stats?.wallet_total ?? 0) },
-          ].map((s) => (
-            <div key={s.l} className={`rounded-2xl border p-4 ${s.hot && Number(s.v) > 0 ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
+            { l: "💰 Fee Platform (Untung)", v: rm(plat?.total_fees ?? 0), gold: true },
+            { l: "Vendor Aktif", v: plat?.total_vendors ?? 0 },
+            { l: "Escrow Dipegang", v: rm(plat?.escrow_held ?? 0) },
+          ].map((s: { l: string; v: string | number; hot?: boolean; gold?: boolean }) => (
+            <div key={s.l} className={`rounded-2xl border p-4 ${s.gold ? "border-amber-400 bg-amber-50 dark:bg-amber-500/10" : s.hot && Number(s.v) > 0 ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
               <p className="text-xs text-slate-500">{s.l}</p>
               <p className="mt-1 text-xl font-bold">{s.v}</p>
             </div>
@@ -344,6 +362,7 @@ export default function Admin() {
                     <th className="px-4 py-3">WhatsApp</th>
                     <th className="px-4 py-3">Wallet</th>
                     <th className="px-4 py-3">Peranan</th>
+                    <th className="px-4 py-3">Tindakan</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -353,7 +372,19 @@ export default function Admin() {
                       <td className="px-4 py-3">{u.whatsapp || "—"}</td>
                       <td className="px-4 py-3">{rm(u.wallet_balance)}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.role === "admin" ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{u.role}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.role === "admin" ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : u.role === "vendor" ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{u.role}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {u.role === "user" && (
+                          <button onClick={() => setRole(u.id, "vendor")} className="rounded-lg bg-brand-500 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-600">
+                            ↑ Jadikan Vendor
+                          </button>
+                        )}
+                        {u.role === "vendor" && (
+                          <button onClick={() => setRole(u.id, "user")} className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                            ↓ Jadikan User
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
