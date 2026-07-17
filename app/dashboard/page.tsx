@@ -320,7 +320,7 @@ export default function Dashboard() {
                 <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
                   <p className="text-sm text-white/80">Baki Semasa (Komisyen − Withdrawal)</p>
                   <p className="mt-1 text-3xl font-extrabold">{rm(wsum?.balance ?? profile?.wallet_balance)}</p>
-                  {(wsum?.pending_withdrawal ?? 0) > 0 && <p className="mt-1 text-xs text-white/80">Tertunda: {rm(wsum?.pending_withdrawal)} (menunggu vendor lulus)</p>}
+                  {(wsum?.pending_withdrawal ?? 0) > 0 && <p className="mt-1 text-xs text-white/80">Tertunda: {rm(wsum?.pending_withdrawal)} (menunggu admin lulus)</p>}
                   <button onClick={withdraw} className="mt-4 rounded-xl bg-white px-5 py-2.5 font-semibold text-brand-600 hover:scale-[1.02]">Mohon Withdraw</button>
                   {(!profile?.bank_account || !profile?.ic_number) && <p className="mt-3 text-xs text-white/90">⚠️ Lengkapkan Bank &amp; IC di Tetapan sebelum withdraw.</p>}
                 </div>

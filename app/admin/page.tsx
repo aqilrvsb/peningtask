@@ -139,6 +139,14 @@ export default function Admin() {
     setSubs((s) => s.filter((x) => x.id !== id));
     loadCore();
   }
+  async function processWd(id: number, approve: boolean) {
+    if (!supabase) return;
+    if (!approve && !confirm("Tolak permohonan pengeluaran ini?")) return;
+    const { error } = await supabase.rpc("process_withdrawal", { p_id: id, p_approve: approve });
+    if (error) return flash("❌ " + error.message);
+    flash(approve ? "💸 Dibayar & baki client dipotong" : "Ditolak");
+    setReport((r) => r.filter((x) => x.id !== id));
+  }
   async function createTasks() {
     if (!supabase) return;
     if (proofTypes.length === 0) return flash("⚠️ Pilih jenis bukti");
@@ -261,8 +269,8 @@ export default function Admin() {
           {section === "vendor-tugasan" && <ReportTable loading={loadingReport} rows={report} cols={[["vendor_name", "Vendor"], ["platform", "Platform"], ["service_type", "Servis"], ["quantity", "Kuantiti"], ["delivered", "Siap"], ["cost", "Kos", "rm"], ["fee", "Fee", "rm"], ["status", "Status"], ["created_at", "Tarikh", "dt"]]} empty="Tiada kempen vendor lagi." />}
           {section === "klien-komisen" && <ReportTable loading={loadingReport} rows={report} cols={[["user_name", "Klien"], ["whatsapp", "Telefon"], ["amount", "Komisyen", "rm"], ["note", "Nota"], ["created_at", "Tarikh", "dt"]]} empty="Tiada komisyen klien lagi." />}
           {section === "vendor-komisen" && <ReportTable loading={loadingReport} rows={report} cols={[["user_name", "Vendor"], ["whatsapp", "Telefon"], ["amount", "Komisyen", "rm"], ["note", "Nota"], ["created_at", "Tarikh", "dt"]]} empty="Tiada komisyen vendor lagi." />}
-          {section === "klien-withdraw" && <WithdrawTable loading={loadingReport} rows={report} />}
-          {section === "vendor-withdraw" && <WithdrawTable loading={loadingReport} rows={report} />}
+          {section === "klien-withdraw" && <WithdrawTable loading={loadingReport} rows={report} onProcess={processWd} />}
+          {section === "vendor-withdraw" && <WithdrawTable loading={loadingReport} rows={report} onProcess={processWd} />}
 
           {/* SUBMISSIONS */}
           {section === "submissions" && (
@@ -396,7 +404,7 @@ function ReportTable({ rows, cols, empty, loading }: { rows: Row[]; cols: (strin
   );
 }
 
-function WithdrawTable({ rows, loading }: { rows: Row[]; loading: boolean }) {
+function WithdrawTable({ rows, onProcess, loading }: { rows: Row[]; onProcess: (id: number, ap: boolean) => void; loading: boolean }) {
   if (loading) return <p className="pj-card p-10 text-center text-slate-400">Memuatkan…</p>;
   if (rows.length === 0) return <p className="pj-card p-10 text-center text-slate-400">Tiada pengeluaran lagi.</p>;
   return (
@@ -404,7 +412,7 @@ function WithdrawTable({ rows, loading }: { rows: Row[]; loading: boolean }) {
       <table className="w-full text-left text-sm">
         <thead className="bg-slate-50 text-slate-500 dark:bg-white/5"><tr>
           <th className="px-4 py-3">Nama</th><th className="px-4 py-3">Telefon</th><th className="px-4 py-3">Jumlah</th>
-          <th className="px-4 py-3">Kaedah</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tarikh</th>
+          <th className="px-4 py-3">Kaedah</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tindakan</th>
         </tr></thead>
         <tbody>
           {rows.map((r) => (
@@ -414,7 +422,14 @@ function WithdrawTable({ rows, loading }: { rows: Row[]; loading: boolean }) {
               <td className="px-4 py-3 font-bold">{rm(r.amount)}</td>
               <td className="px-4 py-3">{fmt(r.method)}</td>
               <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${r.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : r.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{String(r.status)}</span></td>
-              <td className="px-4 py-3 text-xs text-slate-400">{fmt(r.created_at, "dt")}</td>
+              <td className="px-4 py-3">
+                {r.status === "requested" ? (
+                  <div className="flex gap-2">
+                    <button onClick={() => onProcess(Number(r.id), true)} className="pj-btn-primary px-3 py-1.5">Bayar</button>
+                    <button onClick={() => onProcess(Number(r.id), false)} className="pj-btn-ghost px-3 py-1.5">Tolak</button>
+                  </div>
+                ) : <span className="text-xs text-slate-400">Selesai</span>}
+              </td>
             </tr>
           ))}
         </tbody>
