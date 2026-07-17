@@ -120,6 +120,22 @@ export default function Home() {
             </div>
           </div>
 
+          {/* hero showcase media */}
+          <div className="mx-auto mt-14 max-w-4xl animate-fade-up" style={{ animationDelay: "290ms" }}>
+            <div className="relative overflow-hidden rounded-[1.75rem] border border-white/60 bg-white/40 p-2 shadow-card ring-1 ring-brand-200/50 backdrop-blur">
+              <div className="pointer-events-none absolute -inset-8 -z-10 bg-brand-400/20 blur-3xl" />
+              <video
+                src="/hero.mp4"
+                poster="/hero.png"
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full rounded-[1.35rem]"
+              />
+            </div>
+          </div>
+
           {/* stat bar */}
           <div className="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-3 animate-fade-up sm:grid-cols-4" style={{ animationDelay: "300ms" }}>
             {STATS.map((s) => (
