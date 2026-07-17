@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/site";
+import { TicketCenter } from "@/components/tickets";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Stats = { users: number; campaigns: number; open_tasks: number; pending_subs: number; pending_withdrawals: number; wallet_total: number };
@@ -26,6 +27,7 @@ const GROUPS = [
     { key: "vendor-withdraw", icon: "🏦", label: "Laporan Pengeluaran" },
   ]},
   { label: "Sistem", items: [
+    { key: "support", icon: "🎫", label: "Support (Withdrawal)" },
     { key: "sms", icon: "📱", label: "SMS TAC" },
   ]},
 ];
@@ -326,6 +328,8 @@ export default function Admin() {
           )}
 
           {/* SMS */}
+          {section === "support" && supabase && <TicketCenter mode="admin" supabase={supabase} />}
+
           {section === "sms" && (
             <div className="max-w-lg pj-card p-6">
               <h2 className="text-lg font-semibold">Konfigurasi SMS TAC (360)</h2>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/site";
 import { PlatformIcon } from "@/components/icons";
+import { TicketCenter } from "@/components/tickets";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Profile = {
@@ -26,6 +27,7 @@ const NAV = [
   { key: "success", icon: "✅", label: "Job Success" },
   { key: "rejected", icon: "❌", label: "Job Rejected" },
   { key: "wallet", icon: "👛", label: "Wallet" },
+  { key: "support", icon: "🎫", label: "Support" },
   { key: "settings", icon: "⚙️", label: "Settings" },
 ];
 const PLATFORMS = ["All", "Facebook", "Threads", "Instagram", "YouTube", "TikTok"];
@@ -348,6 +350,10 @@ export default function Dashboard() {
                 {txns.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No transactions.</p> : <ul className="divide-y divide-slate-100 dark:divide-white/5">{txns.map((x) => <li key={x.id} className="flex items-center justify-between px-4 py-3 text-sm"><span className="text-slate-600 dark:text-slate-300">{x.note ?? x.kind}</span><span className={`font-semibold ${x.amount >= 0 ? "text-brand-600" : "text-rose-500"}`}>{x.amount >= 0 ? "+" : ""}{rm(x.amount)}</span></li>)}</ul>}
               </div>
             </div>
+          )}
+
+          {section === "support" && supabase && (
+            <TicketCenter mode="client" supabase={supabase} jobs={myJobs.map((j) => ({ submission_id: j.submission_id, action: j.action, platform: j.platform }))} withdrawals={wds.map((w) => ({ id: w.id, amount: w.amount, status: w.status }))} />
           )}
 
           {section === "settings" && (

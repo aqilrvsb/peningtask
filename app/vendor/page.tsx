@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Logo } from "@/components/site";
+import { TicketCenter } from "@/components/tickets";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Campaign = { id: number; platform: string; quantity: number; delivered: number; escrow: number; fee: number; status: string; created_at: string };
 type Sub = { id: number; task_id: number; proof: string | null; proof_url: string | null; status: string; created_at: string; tasks: { action: string; reward: number; campaign_id: number } | null };
 
-const TABS = ["Ringkasan", "Cipta Kempen", "Semakan Bukti", "Kempen Saya", "Wallet", "Brand"] as const;
+const TABS = ["Ringkasan", "Cipta Kempen", "Semakan Bukti", "Support", "Kempen Saya", "Wallet", "Brand"] as const;
 type Tab = (typeof TABS)[number];
 const PLATFORMS = ["Facebook", "Threads", "TikTok", "Instagram", "AI"];
 const FEE_PCT = 20;
@@ -341,6 +342,8 @@ export default function VendorPanel() {
               })}
             </div>
           )}
+
+          {tab === "Support" && supabase && <TicketCenter mode="vendor" supabase={supabase} />}
 
           {tab === "Kempen Saya" && (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
