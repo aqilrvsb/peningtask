@@ -83,10 +83,11 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, code }),
       });
-      const vj = await vres.json();
+      const vj = await vres.json().catch(() => ({ ok: false, error: "" }));
       if (!vj.ok) {
         setLoading(false);
-        setErr(vj.error || "Kod tidak sah.");
+        const e = typeof vj.error === "string" && vj.error.trim() && vj.error !== "{}" ? vj.error : "Kod TAC tidak sah atau tamat tempoh.";
+        setErr(e);
         return;
       }
 
@@ -112,7 +113,19 @@ export default function RegisterPage() {
       });
       setLoading(false);
       if (error) {
-        setErr(error.message);
+        console.error("signUp error:", error);
+        const raw = typeof error.message === "string" ? error.message.trim() : "";
+        const lower = raw.toLowerCase();
+        let friendly = raw && raw !== "{}" ? raw : "Pendaftaran gagal. Cuba lagi.";
+        if (lower.includes("already") && (lower.includes("registered") || lower.includes("user")))
+          friendly = "Emel ini sudah didaftarkan. Sila log masuk.";
+        else if (lower.includes("email") && lower.includes("invalid"))
+          friendly = "Format emel tidak sah.";
+        else if (lower.includes("password"))
+          friendly = "Kata laluan terlalu lemah (min. 6 aksara).";
+        else if (lower.includes("database") || raw === "{}" || !raw)
+          friendly = "Ralat semasa mencipta akaun. Sila cuba lagi.";
+        setErr(friendly);
         return;
       }
       if (data.session) window.location.href = "/dashboard";
