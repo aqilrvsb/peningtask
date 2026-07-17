@@ -1,682 +1,412 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/site";
+import { PlatformIcon } from "@/components/icons";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Profile = {
-  full_name: string | null;
-  whatsapp: string | null;
-  wallet_balance: number;
-  ref_code: string | null;
-  role: string;
-  xp: number;
-  level: number;
-  total_earned: number;
-  tasks_done: number;
-  bank_name: string | null;
-  bank_account: string | null;
+  full_name: string | null; whatsapp: string | null; wallet_balance: number; ref_code: string | null;
+  role: string; xp: number; level: number; total_earned: number; tasks_done: number;
+  bank_name: string | null; bank_account: string | null; ic_number: string | null;
+  url_facebook: string | null; url_threads: string | null; url_instagram: string | null;
+  url_youtube: string | null; url_tiktok: string | null;
 };
-type Task = {
-  id: number;
-  platform: string;
-  action: string;
-  reward: number;
-  proof_types: string[];
-  target_url: string | null;
-  vendor_name: string | null;
-  vendor_logo: string | null;
-};
-type Campaign = { id: number; platform: string; service_type: string; quantity: number; delivered: number; status: string };
+type Job = { id: number; platform: string; action: string; reward: number; proof_types: string[]; target_url: string | null; vendor_name: string | null; vendor_logo: string | null };
+type MyJob = { submission_id: number; task_id: number; platform: string; action: string; reward: number; status: string; proof: string | null; proof_url: string | null; reject_reason: string | null; vendor_name: string | null; created_at: string };
 type Txn = { id: number; amount: number; kind: string; note: string | null; created_at: string };
 type Wd = { id: number; amount: number; method: string | null; status: string; created_at: string };
 type Notif = { id: number; title: string; body: string | null; read: boolean; created_at: string };
 
-const TABS = ["Ringkasan", "Tugasan", "Kempen Saya", "Wallet", "Affiliate", "Tetapan"] as const;
-type Tab = (typeof TABS)[number];
-const FILTERS = ["Semua", "Facebook", "Threads", "TikTok", "Instagram", "AI"];
+const NAV = [
+  { key: "ringkasan", icon: "📊", label: "Ringkasan" },
+  { key: "marketplace", icon: "🛒", label: "Marketplace Job" },
+  { key: "proses", icon: "⏳", label: "Kerja Diproses" },
+  { key: "berjaya", icon: "✅", label: "Kerja Berjaya" },
+  { key: "ditolak", icon: "❌", label: "Kerja Ditolak" },
+  { key: "wallet", icon: "👛", label: "Wallet" },
+  { key: "affiliate", icon: "🔗", label: "Affiliate" },
+  { key: "tetapan", icon: "⚙️", label: "Tetapan" },
+];
+const PLATFORMS = ["Semua", "Facebook", "Threads", "Instagram", "YouTube", "TikTok"];
+const ICON_KEY: Record<string, string> = { Facebook: "facebook", Threads: "threads", Instagram: "instagram", YouTube: "youtube", TikTok: "tiktok" };
+const URL_FIELD: Record<string, keyof Profile> = { Facebook: "url_facebook", Threads: "url_threads", Instagram: "url_instagram", YouTube: "url_youtube", TikTok: "url_tiktok" };
 
-const EMOJI: Record<string, string> = {
-  Facebook: "👍",
-  Threads: "🧵",
-  TikTok: "🎵",
-  Instagram: "📸",
-  AI: "🤖",
-};
-
-const WD_LABEL: Record<string, string> = {
-  requested: "Menunggu",
-  paid: "Dibayar",
-  rejected: "Ditolak",
-};
-
-function rm(n: number) {
-  return "RM " + Number(n || 0).toFixed(2);
+function rm(n: unknown) { return "RM " + Number(n || 0).toFixed(2); }
+function daysAgo(iso: string) {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d <= 0) { const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3600000); return h <= 0 ? "baru" : `${h} jam lalu`; }
+  return `${d} hari lalu`;
 }
 
 export default function Dashboard() {
-  const [tab, setTab] = useState<Tab>("Ringkasan");
-  const [filter, setFilter] = useState("Semua");
+  const supabase = useMemo(() => (hasSupabase ? createClient() : null), []);
+  const [section, setSection] = useState("ringkasan");
+  const [navOpen, setNavOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [myJobs, setMyJobs] = useState<MyJob[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
   const [wds, setWds] = useState<Wd[]>([]);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [showNotif, setShowNotif] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
 
-  // settings form
-  const [sName, setSName] = useState("");
-  const [sWa, setSWa] = useState("");
-  const [sBank, setSBank] = useState("");
-  const [sAcc, setSAcc] = useState("");
+  const [mpPlatform, setMpPlatform] = useState("Semua");
+  const [jobPlatform, setJobPlatform] = useState("Semua");
+  const [jobDate, setJobDate] = useState("");
 
-  const supabase = hasSupabase ? createClient() : null;
+  // apply modal
+  const [activeTask, setActiveTask] = useState<Job | null>(null);
+  const [proofText, setProofText] = useState("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const flash = (m: string) => {
-    setToast(m);
-    setTimeout(() => setToast(null), 3200);
-  };
+  // settings
+  const [f, setF] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
 
   const load = useCallback(async () => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    if (!supabase) { setLoading(false); return; }
     const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) {
-      window.location.href = "/log-masuk";
-      return;
-    }
+    if (!auth.user) { window.location.href = "/log-masuk"; return; }
     const uid = auth.user.id;
-    const [p, t, c, w, wd, nf] = await Promise.all([
+    const [p, mj, jb, w, wd, nf] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", uid).single(),
+      supabase.rpc("client_my_jobs"),
       supabase.rpc("open_tasks"),
-      supabase.from("campaigns").select("id,platform,service_type,quantity,delivered,status").eq("owner", uid).order("created_at", { ascending: false }),
-      supabase.from("wallet_transactions").select("id,amount,kind,note,created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(20),
-      supabase.from("withdrawals").select("id,amount,method,status,created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(10),
-      supabase.from("notifications").select("id,title,body,read,created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
+      supabase.from("wallet_transactions").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(30),
+      supabase.from("withdrawals").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
+      supabase.from("notifications").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
     ]);
     if (p.data) {
       const pr = p.data as Profile;
       setProfile(pr);
-      setSName(pr.full_name ?? "");
-      setSWa(pr.whatsapp ?? "");
-      setSBank(pr.bank_name ?? "");
-      setSAcc(pr.bank_account ?? "");
+      setF({
+        full_name: pr.full_name ?? "", whatsapp: pr.whatsapp ?? "", ic_number: pr.ic_number ?? "",
+        bank_name: pr.bank_name ?? "", bank_account: pr.bank_account ?? "",
+        url_facebook: pr.url_facebook ?? "", url_threads: pr.url_threads ?? "", url_instagram: pr.url_instagram ?? "",
+        url_youtube: pr.url_youtube ?? "", url_tiktok: pr.url_tiktok ?? "",
+      });
     }
-    setTasks((t.data as Task[]) ?? []);
-    setCampaigns((c.data as Campaign[]) ?? []);
+    setMyJobs((mj.data as MyJob[]) ?? []);
+    setJobs((jb.data as Job[]) ?? []);
     setTxns((w.data as Txn[]) ?? []);
     setWds((wd.data as Wd[]) ?? []);
     setNotifs((nf.data as Notif[]) ?? []);
     setLoading(false);
   }, [supabase]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const unread = notifs.filter((n) => !n.read).length;
-
   async function openNotif() {
     setShowNotif((v) => !v);
-    if (!showNotif && unread > 0 && supabase) {
-      await supabase.rpc("mark_notifications_read");
-      setNotifs((ns) => ns.map((n) => ({ ...n, read: true })));
-    }
+    if (!showNotif && unread > 0 && supabase) { await supabase.rpc("mark_notifications_read"); setNotifs((ns) => ns.map((n) => ({ ...n, read: true }))); }
   }
 
-  // task modal state
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [proofText, setProofText] = useState("");
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const needsFile =
-    !!activeTask &&
-    (activeTask.proof_types?.includes("image") || activeTask.proof_types?.includes("video"));
-  const needsLink = !!activeTask && activeTask.proof_types?.includes("link");
-  const acceptTypes = activeTask
-    ? [
-        activeTask.proof_types?.includes("image") ? "image/*" : "",
-        activeTask.proof_types?.includes("video") ? "video/*" : "",
-      ]
-        .filter(Boolean)
-        .join(",")
-    : "";
+  function tryApply(job: Job) {
+    const field = URL_FIELD[job.platform];
+    if (field && !(profile?.[field])) {
+      flash(`⚠️ Isi URL profil ${job.platform} anda di Tetapan dahulu.`);
+      setSection("tetapan");
+      return;
+    }
+    setActiveTask(job); setProofText(""); setProofFile(null);
+  }
 
   async function submitProof() {
     if (!supabase || !activeTask) return;
-    if (needsFile && !proofFile) {
-      flash("⚠️ Sila muat naik bukti " + (acceptTypes.includes("video") ? "gambar/video" : "gambar"));
-      return;
-    }
-    if (needsLink && !proofText.trim()) {
-      flash("⚠️ Sila masukkan link / username sebagai bukti");
-      return;
-    }
+    const needFile = activeTask.proof_types?.includes("image") || activeTask.proof_types?.includes("video");
+    const needLink = activeTask.proof_types?.includes("link");
+    if (needFile && !proofFile) return flash("⚠️ Muat naik bukti gambar/video");
+    if (needLink && !proofText.trim()) return flash("⚠️ Masukkan link/username");
     setSubmitting(true);
-    let proofUrl: string | null = null;
+    let url: string | null = null;
     if (proofFile) {
       const { data: auth } = await supabase.auth.getUser();
       const ext = proofFile.name.split(".").pop() || "bin";
       const path = `${auth.user!.id}/${activeTask.id}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
       const { error: upErr } = await supabase.storage.from("proofs").upload(path, proofFile);
-      if (upErr) {
-        setSubmitting(false);
-        flash("❌ Muat naik gagal: " + upErr.message);
-        return;
-      }
-      proofUrl = supabase.storage.from("proofs").getPublicUrl(path).data.publicUrl;
+      if (upErr) { setSubmitting(false); return flash("❌ Muat naik gagal: " + upErr.message); }
+      url = supabase.storage.from("proofs").getPublicUrl(path).data.publicUrl;
     }
-    const { error } = await supabase.rpc("submit_task", {
-      p_task_id: activeTask.id,
-      p_proof: proofText || null,
-      p_proof_url: proofUrl,
-    });
+    const { error } = await supabase.rpc("submit_task", { p_task_id: activeTask.id, p_proof: proofText || null, p_proof_url: url });
     setSubmitting(false);
-    if (error) flash("❌ " + error.message);
-    else {
-      flash("✅ Dihantar! Ganjaran " + rm(activeTask.reward) + " selepas disemak.");
-      setActiveTask(null);
-      setProofText("");
-      setProofFile(null);
-      load();
-    }
+    if (error) return flash("❌ " + error.message);
+    flash("✅ Permohonan dihantar! Menunggu semakan vendor.");
+    setActiveTask(null); load(); setSection("proses");
   }
 
   async function topup() {
-    if (!supabase) return;
-    const v = prompt("Jumlah topup (RM):", "20");
-    if (!v) return;
+    if (!supabase) return; const v = prompt("Jumlah topup (RM):", "20"); if (!v) return;
     const { error } = await supabase.rpc("topup_wallet", { p_amount: Number(v) });
-    if (error) flash("❌ " + error.message);
-    else {
-      flash("✅ Wallet ditambah " + rm(Number(v)));
-      load();
-    }
+    flash(error ? "❌ " + error.message : "✅ Wallet ditambah " + rm(Number(v))); if (!error) load();
   }
-
   async function withdraw() {
     if (!supabase || !profile) return;
-    if (!profile.bank_name || !profile.bank_account) {
-      flash("⚠️ Sila isi maklumat bank di tab Tetapan dahulu.");
-      setTab("Tetapan");
-      return;
+    if (!profile.full_name || !profile.ic_number || !profile.bank_name || !profile.bank_account) {
+      flash("⚠️ Lengkapkan Nama, IC, Bank & No. Akaun di Tetapan dahulu."); setSection("tetapan"); return;
     }
-    const v = prompt("Jumlah pengeluaran (RM):");
-    if (!v) return;
+    const v = prompt("Jumlah pengeluaran (RM):"); if (!v) return;
     const method = `${profile.bank_name} ${profile.bank_account}`;
     const { error } = await supabase.rpc("request_withdrawal", { p_amount: Number(v), p_method: method });
-    if (error) flash("❌ " + error.message);
-    else {
-      flash("✅ Permohonan dihantar. Diproses dalam 24 jam.");
-      load();
-    }
+    flash(error ? "❌ " + error.message : "✅ Permohonan dihantar. Diproses dalam 24 jam."); if (!error) load();
   }
 
   async function saveSettings() {
-    if (!supabase) return;
+    if (!supabase) return; setSaving(true);
     const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) return;
-    const { error } = await supabase
-      .from("profiles")
-      .update({ full_name: sName, whatsapp: sWa, bank_name: sBank, bank_account: sAcc })
-      .eq("id", auth.user.id);
-    if (error) flash("❌ " + error.message);
-    else {
-      flash("✅ Tetapan disimpan");
-      load();
-    }
+    const { error } = await supabase.from("profiles").update({
+      full_name: f.full_name, whatsapp: f.whatsapp, ic_number: f.ic_number, bank_name: f.bank_name, bank_account: f.bank_account,
+      url_facebook: f.url_facebook, url_threads: f.url_threads, url_instagram: f.url_instagram, url_youtube: f.url_youtube, url_tiktok: f.url_tiktok,
+    }).eq("id", auth.user!.id);
+    setSaving(false);
+    flash(error ? "❌ " + error.message : "✅ Tetapan disimpan"); if (!error) load();
   }
 
-  const refLink =
-    typeof window !== "undefined" && profile?.ref_code
-      ? `${window.location.origin}/?ref=${profile.ref_code}`
-      : "";
-
-  const shownTasks = filter === "Semua" ? tasks : tasks.filter((t) => t.platform === filter);
+  const refLink = typeof window !== "undefined" && profile?.ref_code ? `${window.location.origin}/?ref=${profile.ref_code}` : "";
   const xpInLevel = (profile?.xp ?? 0) % 100;
+  const shownJobs = mpPlatform === "Semua" ? jobs : jobs.filter((j) => j.platform === mpPlatform);
+  const filterMine = (status: string) => myJobs.filter((j) => j.status === status)
+    .filter((j) => jobPlatform === "Semua" || j.platform === jobPlatform)
+    .filter((j) => !jobDate || j.created_at.slice(0, 10) === jobDate);
+  const activeLabel = NAV.find((n) => n.key === section)?.label ?? "";
+
+  const setField = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
+  const inp = (k: string, label: string, ph = "") => (
+    <div>
+      <label className="block text-sm font-medium">{label}</label>
+      <input value={f[k] ?? ""} onChange={(e) => setField(k, e.target.value)} placeholder={ph} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen">
-      <header className="pj-glass sticky top-0 z-30">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+    <div className="min-h-screen lg:flex">
+      {/* Sidebar */}
+      <aside className={`${navOpen ? "block" : "hidden"} border-r border-slate-200/70 bg-white/70 backdrop-blur lg:block lg:w-60 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
+        <div className="sticky top-0 max-h-screen overflow-y-auto p-4">
           <Logo />
-          <div className="flex items-center gap-2">
-            {profile?.role === "admin" && (
-              <Link href="/admin" className="rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-slate-900">
-                Admin
-              </Link>
-            )}
-            {(profile?.role === "vendor" || profile?.role === "admin") && (
-              <Link href="/vendor" className="pj-btn-primary px-3.5 py-2">
-                📣 Vendor
-              </Link>
-            )}
-            {/* notifications bell */}
-            <div className="relative">
-              <button onClick={openNotif} aria-label="Notifikasi" className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white/70 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
-                🔔
-                {unread > 0 && (
-                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-gradient px-1 text-[10px] font-bold text-white shadow-glow-sm">
-                    {unread}
-                  </span>
-                )}
+          <nav className="mt-6 space-y-1">
+            {NAV.map((it) => (
+              <button key={it.key} onClick={() => { setSection(it.key); setNavOpen(false); }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${section === it.key ? "bg-brand-gradient text-white shadow-glow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
+                <span className="text-base">{it.icon}</span>{it.label}
+                {it.key === "proses" && filterMine("pending").length > 0 && <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{filterMine("pending").length}</span>}
               </button>
-              {showNotif && (
-                <div className="pj-card absolute right-0 top-12 z-50 w-80 overflow-hidden p-0 shadow-card">
-                  <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold dark:border-white/10">Notifikasi</p>
-                  <div className="max-h-80 overflow-y-auto">
-                    {notifs.length === 0 ? (
-                      <p className="p-5 text-center text-sm text-slate-400">Tiada notifikasi lagi.</p>
-                    ) : (
-                      notifs.map((n) => (
-                        <div key={n.id} className="border-b border-slate-50 px-4 py-3 last:border-0 dark:border-slate-800/50">
-                          <p className="text-sm font-semibold">{n.title}</p>
-                          {n.body && <p className="mt-0.5 text-xs text-slate-500">{n.body}</p>}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={async () => {
-                if (supabase) await supabase.auth.signOut();
-                window.location.href = "/log-masuk";
-              }}
-              className="pj-btn-ghost px-3.5 py-2"
-            >
-              Log Keluar
-            </button>
-          </div>
+            ))}
+          </nav>
+          <button onClick={async () => { if (supabase) await supabase.auth.signOut(); window.location.href = "/log-masuk"; }} className="mt-6 block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">Log Keluar</button>
         </div>
-      </header>
+      </aside>
 
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        {loading ? (
-          <div className="py-24 text-center text-slate-400">Memuatkan…</div>
-        ) : (
+      {/* Content */}
+      <main className="min-w-0 flex-1">
+        <header className="pj-glass sticky top-0 z-20 flex items-center justify-between px-4 py-3 lg:px-8">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setNavOpen((v) => !v)} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 lg:hidden dark:border-white/10">☰</button>
+            <h1 className="text-lg font-extrabold tracking-tight">{activeLabel}</h1>
+          </div>
+          <div className="relative">
+            <button onClick={openNotif} className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white/70 dark:border-white/10 dark:bg-white/5">🔔
+              {unread > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-gradient px-1 text-[10px] font-bold text-white">{unread}</span>}
+            </button>
+            {showNotif && (
+              <div className="pj-card absolute right-0 top-12 z-50 w-80 overflow-hidden p-0">
+                <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold dark:border-white/10">Notifikasi</p>
+                <div className="max-h-80 overflow-y-auto">
+                  {notifs.length === 0 ? <p className="p-5 text-center text-sm text-slate-400">Tiada notifikasi.</p> :
+                    notifs.map((n) => <div key={n.id} className="border-b border-slate-50 px-4 py-3 last:border-0 dark:border-white/5"><p className="text-sm font-semibold">{n.title}</p>{n.body && <p className="mt-0.5 text-xs text-slate-500">{n.body}</p>}</div>)}
+                </div>
+              </div>
+            )}
+          </div>
+        </header>
+
+        <div className="p-4 lg:p-8">
+          {loading ? <p className="py-24 text-center text-slate-400">Memuatkan…</p> : (
           <>
-            {/* Hero strip: level + stats */}
-            <div className="grid gap-4 lg:grid-cols-4">
-              <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow lg:col-span-2">
-                <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-                <div className="pointer-events-none absolute right-4 top-4 text-5xl opacity-20">💳</div>
-                <p className="text-sm font-medium text-white/80">Baki Wallet</p>
-                <p className="mt-1 text-4xl font-extrabold tracking-tight">{rm(profile?.wallet_balance ?? 0)}</p>
-                <div className="mt-5 flex items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between text-xs text-white/80">
-                      <span>Level {profile?.level ?? 1} ⭐</span>
-                      <span>{xpInLevel}/100 XP</span>
-                    </div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/25">
-                      <div className="h-full rounded-full bg-white transition-all" style={{ width: `${xpInLevel}%` }} />
-                    </div>
-                  </div>
+          {section === "ringkasan" && (
+            <div className="space-y-6">
+              <div className="grid gap-4 lg:grid-cols-4">
+                <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow lg:col-span-2">
+                  <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
+                  <p className="text-sm text-white/80">Baki Wallet</p>
+                  <p className="mt-1 text-4xl font-extrabold">{rm(profile?.wallet_balance)}</p>
+                  <div className="mt-5"><div className="flex justify-between text-xs text-white/80"><span>Level {profile?.level ?? 1} ⭐</span><span>{xpInLevel}/100 XP</span></div>
+                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${xpInLevel}%` }} /></div></div>
                 </div>
+                <div className="pj-card p-5"><div className="flex items-center gap-2 text-sm text-slate-500"><span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-lg dark:bg-brand-500/10">💰</span>Jumlah Diperoleh</div><p className="mt-3 text-2xl font-extrabold text-gradient">{rm(profile?.total_earned)}</p></div>
+                <div className="pj-card p-5"><div className="flex items-center gap-2 text-sm text-slate-500"><span className="grid h-9 w-9 place-items-center rounded-xl bg-accent-500/10 text-lg">✅</span>Tugasan Selesai</div><p className="mt-3 text-2xl font-extrabold">{profile?.tasks_done ?? 0}</p></div>
               </div>
-              <div className="pj-card p-5">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-lg dark:bg-brand-500/10">💰</span>
-                  Jumlah Diperoleh
+              <div className="pj-card p-6">
+                <h2 className="text-lg font-semibold">Selamat datang, {profile?.full_name} 👋</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Cari kerja di Marketplace, siapkan & hantar bukti untuk dapat ganjaran.</p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button onClick={() => setSection("marketplace")} className="pj-btn-primary px-5 py-2.5">🛒 Cari Job ({jobs.length})</button>
+                  <button onClick={() => setSection("tetapan")} className="pj-btn-ghost px-5 py-2.5">⚙️ Lengkapkan Profil</button>
                 </div>
-                <p className="mt-3 text-2xl font-extrabold text-gradient">{rm(profile?.total_earned ?? 0)}</p>
-              </div>
-              <div className="pj-card p-5">
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent-500/10 text-lg">✅</span>
-                  Tugasan Selesai
-                </div>
-                <p className="mt-3 text-2xl font-extrabold">{profile?.tasks_done ?? 0}</p>
               </div>
             </div>
+          )}
 
-            {/* Tabs */}
-            <div className="mt-8 flex flex-wrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200/70 bg-white/60 p-1.5 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`pj-tab ${tab === t ? "pj-tab-active" : ""}`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-6">
-              {tab === "Ringkasan" && (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-                    <h2 className="text-lg font-semibold">Selamat datang, {profile?.full_name} 👋</h2>
-                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                      Buat tugasan untuk kumpul ganjaran &amp; XP, atau lancar kempen untuk naikkan akaun sosial anda.
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button onClick={() => setTab("Tugasan")} className="rounded-xl bg-brand-500 px-5 py-2.5 font-semibold text-white hover:bg-brand-600">
-                        Buat Tugasan ({tasks.length})
-                      </button>
-                      <Link href="/marketplace" className="rounded-xl border border-slate-300 px-5 py-2.5 font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
-                        Lancar Kempen
-                      </Link>
+          {section === "marketplace" && (
+            <div>
+              <div className="mb-5 flex flex-wrap gap-2">
+                {PLATFORMS.map((p) => <button key={p} onClick={() => setMpPlatform(p)} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>{p}</button>)}
+              </div>
+              {shownJobs.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">Tiada job {mpPlatform !== "Semua" ? mpPlatform : ""} buat masa ini. Semak semula nanti 🙌</p> : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {shownJobs.map((j) => (
+                    <div key={j.id} className="pj-card pj-card-hover flex flex-col p-5">
+                      <div className="flex items-center gap-3">
+                        {j.vendor_logo ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={j.vendor_logo} alt="" className="h-11 w-11 rounded-xl border border-slate-200 object-cover dark:border-white/10" /> : ICON_KEY[j.platform] ? <PlatformIcon name={ICON_KEY[j.platform]} size={44} /> : <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 dark:bg-white/5">⭐</span>}
+                        <div className="min-w-0"><p className="truncate font-bold">{j.action}</p><p className="text-xs text-slate-500">{j.platform} · oleh <b>{j.vendor_name}</b></p></div>
+                      </div>
+                      <div className="mt-4 flex items-end justify-between">
+                        <div><span className="text-2xl font-extrabold text-gradient">{rm(j.reward)}</span></div>
+                        <button onClick={() => tryApply(j)} className="pj-btn-primary px-4 py-2">Mohon Job</button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-                    <h3 className="font-semibold">🏆 Papan Pendahulu</h3>
-                    <p className="mt-1 text-sm text-slate-500">Lihat siapa paling banyak menjana di PeningJob.</p>
-                    <Link href="/leaderboard" className="mt-3 inline-block font-semibold text-brand-500 hover:underline">
-                      Lihat Leaderboard →
-                    </Link>
-                  </div>
+                  ))}
                 </div>
               )}
+            </div>
+          )}
 
-              {tab === "Tugasan" && (
-                <div>
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    {FILTERS.map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        className={`rounded-full px-4 py-1.5 text-sm font-medium ${
-                          filter === f
-                            ? "bg-brand-500 text-white"
-                            : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                        }`}
-                      >
-                        {EMOJI[f] ?? "✨"} {f}
-                      </button>
-                    ))}
-                  </div>
+          {(section === "proses" || section === "berjaya" || section === "ditolak") && (() => {
+            const status = section === "proses" ? "pending" : section === "berjaya" ? "approved" : "rejected";
+            const rows = filterMine(status);
+            return (
+              <div>
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  {PLATFORMS.map((p) => <button key={p} onClick={() => setJobPlatform(p)} className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${jobPlatform === p ? "bg-brand-gradient text-white" : "border border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-300"}`}>{p}</button>)}
+                  <input type="date" value={jobDate} onChange={(e) => setJobDate(e.target.value)} className="ml-auto rounded-xl px-3 py-1.5 text-sm" />
+                  {jobDate && <button onClick={() => setJobDate("")} className="text-sm text-slate-500 hover:underline">reset</button>}
+                </div>
+                {rows.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">Tiada kerja dalam kategori ini.</p> : (
                   <div className="space-y-3">
-                    {shownTasks.length === 0 && (
-                      <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 dark:border-slate-700">
-                        Tiada tugasan {filter !== "Semua" ? filter : ""} buat masa ini. Semak semula nanti 🙌
-                      </p>
-                    )}
-                    {shownTasks.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-brand-200 dark:border-slate-800 dark:bg-slate-900">
-                        <div className="flex items-center gap-3">
-                          {t.vendor_logo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={t.vendor_logo} alt={t.vendor_name ?? "Vendor"} className="h-11 w-11 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
-                          ) : (
-                            <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-xl dark:bg-slate-800">
-                              {EMOJI[t.platform] ?? "⭐"}
-                            </span>
-                          )}
-                          <div>
-                            <p className="font-semibold">{t.action}</p>
-                            <p className="text-sm text-slate-500">
-                              {EMOJI[t.platform] ?? ""} {t.platform} · oleh <b>{t.vendor_name ?? "PeningJob"}</b> · +10 XP
-                            </p>
+                    {rows.map((j) => (
+                      <div key={j.submission_id} className="pj-card p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold">{j.action}</p>
+                            <p className="text-sm text-slate-500">{j.platform} · oleh {j.vendor_name} · {daysAgo(j.created_at)}</p>
+                            {j.status === "rejected" && <p className="mt-1 text-sm text-rose-600">Sebab ditolak: {j.reject_reason || "Bukti tidak lengkap / disyaki tidak sah."}</p>}
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-gradient">{rm(j.reward)}</p>
+                            <span className={`mt-1 inline-block rounded-full px-2.5 py-1 text-xs font-medium ${j.status === "approved" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : j.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{j.status === "approved" ? "Berjaya" : j.status === "rejected" ? "Ditolak" : "Diproses"}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-brand-500">{rm(t.reward)}</span>
-                          <button
-                            onClick={() => {
-                              setActiveTask(t);
-                              setProofText("");
-                              setProofFile(null);
-                            }}
-                            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-                          >
-                            Mula
-                          </button>
-                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            );
+          })()}
 
-              {tab === "Kempen Saya" && (
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                  {campaigns.length === 0 ? (
-                    <p className="p-8 text-center text-slate-400">
-                      Belum ada kempen.{" "}
-                      <Link href="/marketplace" className="text-brand-500 hover:underline">
-                        Lancar sekarang →
-                      </Link>
-                    </p>
-                  ) : (
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/50">
-                        <tr>
-                          <th className="px-4 py-3">Platform</th>
-                          <th className="px-4 py-3">Servis</th>
-                          <th className="px-4 py-3">Progres</th>
-                          <th className="px-4 py-3">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {campaigns.map((c) => (
-                          <tr key={c.id} className="border-t border-slate-100 dark:border-slate-800">
-                            <td className="px-4 py-3 font-medium">{EMOJI[c.platform]} {c.platform}</td>
-                            <td className="px-4 py-3">{c.service_type}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-                                  <div className="h-full bg-brand-500" style={{ width: `${Math.min(100, (c.delivered / c.quantity) * 100)}%` }} />
-                                </div>
-                                <span className="text-xs text-slate-500">{c.delivered}/{c.quantity}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.status === "completed" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>
-                                {c.status === "completed" ? "Selesai" : "Berjalan"}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
-
-              {tab === "Wallet" && (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-                      <p className="text-sm text-slate-500">Baki tersedia</p>
-                      <p className="mt-1 text-3xl font-bold text-brand-500">{rm(profile?.wallet_balance ?? 0)}</p>
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <button onClick={topup} className="rounded-xl bg-brand-500 px-5 py-2.5 font-semibold text-white hover:bg-brand-600">Topup</button>
-                        <button onClick={withdraw} className="rounded-xl border border-slate-300 px-5 py-2.5 font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Withdraw</button>
-                      </div>
-                    </div>
-                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                      <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-slate-800">Sejarah Pengeluaran</p>
-                      {wds.length === 0 ? (
-                        <p className="p-5 text-center text-sm text-slate-400">Tiada pengeluaran lagi.</p>
-                      ) : (
-                        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {wds.map((w) => (
-                            <li key={w.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                              <div>
-                                <p className="font-semibold">{rm(w.amount)}</p>
-                                <p className="text-xs text-slate-400">{w.method}</p>
-                              </div>
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${w.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : w.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>
-                                {WD_LABEL[w.status] ?? w.status}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+          {section === "wallet" && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-4">
+                <div className="pj-card p-6">
+                  <p className="text-sm text-slate-500">Baki tersedia (komisyen &amp; ganjaran)</p>
+                  <p className="mt-1 text-3xl font-extrabold text-gradient">{rm(profile?.wallet_balance)}</p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button onClick={withdraw} className="pj-btn-primary px-5 py-2.5">Withdraw</button>
+                    <button onClick={topup} className="pj-btn-ghost px-5 py-2.5">Topup</button>
                   </div>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                    <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-slate-800">Transaksi Terkini</p>
-                    {txns.length === 0 ? (
-                      <p className="p-6 text-center text-sm text-slate-400">Tiada transaksi lagi.</p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {txns.map((x) => (
-                          <li key={x.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                            <span className="text-slate-600 dark:text-slate-300">{x.note ?? x.kind}</span>
-                            <span className={`font-semibold ${x.amount >= 0 ? "text-brand-500" : "text-rose-500"}`}>
-                              {x.amount >= 0 ? "+" : ""}{rm(x.amount)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                  {(!profile?.bank_account || !profile?.ic_number) && <p className="mt-3 text-xs text-amber-600">⚠️ Lengkapkan maklumat bank &amp; IC di Tetapan sebelum withdraw.</p>}
                 </div>
-              )}
-
-              {tab === "Affiliate" && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-                  <h2 className="text-lg font-semibold">Program Affiliate 💰</h2>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                    Dapat <b>RM0.10</b> setiap rakan mendaftar melalui link anda + <b>komisyen 10%</b> setiap kali mereka topup. Automatik masuk wallet.
-                  </p>
-                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
-                    <code className="flex-1 truncate px-2 text-sm">{refLink || "—"}</code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard?.writeText(refLink);
-                        flash("✅ Link disalin — kongsi sekarang!");
-                      }}
-                      className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-                    >
-                      Salin
-                    </button>
-                  </div>
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent("Jom join PeningJob — buat tugasan ringkas, dapat duit! " + refLink)}`}
-                    target="_blank"
-                    className="mt-3 inline-block rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                  >
-                    Kongsi ke WhatsApp →
-                  </a>
+                <div className="pj-card overflow-hidden p-0">
+                  <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-white/10">Sejarah Pengeluaran</p>
+                  {wds.length === 0 ? <p className="p-5 text-center text-sm text-slate-400">Tiada pengeluaran.</p> : <ul className="divide-y divide-slate-100 dark:divide-white/5">{wds.map((w) => <li key={w.id} className="flex items-center justify-between px-4 py-3 text-sm"><div><p className="font-semibold">{rm(w.amount)}</p><p className="text-xs text-slate-400">{w.method}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${w.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : w.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{w.status === "paid" ? "Dibayar" : w.status === "rejected" ? "Ditolak" : "Menunggu"}</span></li>)}</ul>}
                 </div>
-              )}
-
-              {tab === "Tetapan" && (
-                <div className="max-w-lg space-y-3 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-                  <h2 className="text-lg font-semibold">Tetapan Akaun</h2>
-                  <label className="block text-sm font-medium">Nama penuh</label>
-                  <input value={sName} onChange={(e) => setSName(e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-                  <label className="block text-sm font-medium">No. WhatsApp</label>
-                  <input value={sWa} onChange={(e) => setSWa(e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-                  <div className="rounded-xl bg-brand-50 p-3 text-xs text-brand-700 dark:bg-brand-500/10 dark:text-brand-100">
-                    Maklumat bank diperlukan untuk pengeluaran (withdraw).
-                  </div>
-                  <label className="block text-sm font-medium">Nama bank / e-wallet</label>
-                  <input value={sBank} onChange={(e) => setSBank(e.target.value)} placeholder="cth: Maybank / TNG" className="w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-                  <label className="block text-sm font-medium">No. akaun</label>
-                  <input value={sAcc} onChange={(e) => setSAcc(e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-                  <button onClick={saveSettings} className="mt-2 w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-600">
-                    Simpan Tetapan
-                  </button>
-                </div>
-              )}
+              </div>
+              <div className="pj-card overflow-hidden p-0">
+                <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-white/10">Transaksi Terkini</p>
+                {txns.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">Tiada transaksi.</p> : <ul className="divide-y divide-slate-100 dark:divide-white/5">{txns.map((x) => <li key={x.id} className="flex items-center justify-between px-4 py-3 text-sm"><span className="text-slate-600 dark:text-slate-300">{x.note ?? x.kind}</span><span className={`font-semibold ${x.amount >= 0 ? "text-brand-600" : "text-rose-500"}`}>{x.amount >= 0 ? "+" : ""}{rm(x.amount)}</span></li>)}</ul>}
+              </div>
             </div>
-          </>
-        )}
-      </div>
+          )}
 
-      {/* Task proof modal */}
+          {section === "affiliate" && (
+            <div className="pj-card max-w-xl p-6">
+              <h2 className="text-lg font-semibold">Program Affiliate 💰</h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Dapat <b>RM0.10</b> setiap rakan mendaftar + <b>komisyen 10%</b> topup mereka. Automatik masuk wallet.</p>
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 dark:border-white/10 dark:bg-white/5">
+                <code className="flex-1 truncate px-2 text-sm">{refLink || "—"}</code>
+                <button onClick={() => { navigator.clipboard?.writeText(refLink); flash("✅ Link disalin!"); }} className="pj-btn-primary px-4 py-2">Salin</button>
+              </div>
+              <a href={`https://wa.me/?text=${encodeURIComponent("Jom join PeningJob — buat tugasan, dapat duit! " + refLink)}`} target="_blank" className="pj-btn-ghost mt-3 inline-flex px-4 py-2">Kongsi ke WhatsApp →</a>
+            </div>
+          )}
+
+          {section === "tetapan" && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="pj-card p-6">
+                <h2 className="text-lg font-semibold">🔗 Profil Sosial</h2>
+                <p className="mt-1 text-sm text-slate-500">Wajib isi URL platform sebelum boleh mohon job platform tersebut (vendor sahkan akaun anda benar).</p>
+                <div className="mt-4 space-y-3">
+                  {inp("url_facebook", "Facebook", "https://facebook.com/anda")}
+                  {inp("url_threads", "Threads", "https://threads.net/@anda")}
+                  {inp("url_instagram", "Instagram", "https://instagram.com/anda")}
+                  {inp("url_youtube", "YouTube", "https://youtube.com/@anda")}
+                  {inp("url_tiktok", "TikTok", "https://tiktok.com/@anda")}
+                </div>
+              </div>
+              <div className="pj-card h-fit p-6">
+                <h2 className="text-lg font-semibold">🏦 Akaun &amp; Bank (untuk withdraw)</h2>
+                <div className="mt-4 space-y-3">
+                  {inp("full_name", "Nama Penuh (seperti IC)")}
+                  {inp("ic_number", "No. Kad Pengenalan (IC)", "cth: 900101-01-1234")}
+                  {inp("whatsapp", "No. Telefon")}
+                  {inp("bank_name", "Nama Bank / e-Wallet", "cth: Maybank / TNG")}
+                  {inp("bank_account", "No. Akaun")}
+                </div>
+                <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500 dark:bg-white/5">🔒 IC & bank disimpan selamat, hanya anda &amp; admin boleh lihat.</div>
+              </div>
+              <div className="lg:col-span-2">
+                <button onClick={saveSettings} disabled={saving} className="pj-btn-primary w-full py-3.5 lg:w-auto lg:px-10">{saving ? "Menyimpan…" : "Simpan Semua Tetapan"}</button>
+              </div>
+            </div>
+          )}
+          </>
+          )}
+        </div>
+      </main>
+
+      {/* Apply modal */}
       {activeTask && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setActiveTask(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+          <div className="pj-card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
-                {activeTask.vendor_logo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={activeTask.vendor_logo} alt="" className="h-12 w-12 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
-                )}
-                <div>
-                  <h3 className="text-lg font-bold">
-                    {EMOJI[activeTask.platform] ?? "⭐"} {activeTask.action}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    oleh <b>{activeTask.vendor_name ?? "PeningJob"}</b> · {activeTask.platform} · Ganjaran{" "}
-                    <b className="text-brand-500">{rm(activeTask.reward)}</b> · +10 XP
-                  </p>
-                </div>
+                {ICON_KEY[activeTask.platform] && <PlatformIcon name={ICON_KEY[activeTask.platform]} size={44} />}
+                <div><h3 className="text-lg font-bold">{activeTask.action}</h3><p className="mt-1 text-sm text-slate-500">oleh <b>{activeTask.vendor_name}</b> · Ganjaran <b className="text-brand-600">{rm(activeTask.reward)}</b></p></div>
               </div>
-              <button onClick={() => setActiveTask(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button onClick={() => setActiveTask(null)} className="text-slate-400">✕</button>
             </div>
-
-            <ol className="mt-4 space-y-2 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-950">
-              <li>1️⃣ Buka link sasaran di bawah</li>
-              <li>2️⃣ Selesaikan: <b>{activeTask.action}</b></li>
-              <li>
-                3️⃣ Hantar bukti:{" "}
-                <b>
-                  {activeTask.proof_types
-                    ?.map((p) => (p === "image" ? "Gambar" : p === "video" ? "Video" : "Link/Username"))
-                    .join(" + ")}
-                </b>
-              </li>
+            <ol className="mt-4 space-y-1.5 rounded-xl bg-slate-50 p-4 text-sm dark:bg-white/5">
+              <li>1️⃣ Buka link sasaran</li><li>2️⃣ Selesaikan: <b>{activeTask.action}</b></li><li>3️⃣ Hantar bukti</li>
             </ol>
-
-            {activeTask.target_url && (
-              <a
-                href={activeTask.target_url}
-                target="_blank"
-                className="mt-3 block truncate rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-center text-sm font-semibold text-brand-600 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10"
-              >
-                🔗 Buka Link Sasaran
-              </a>
+            {activeTask.target_url && <a href={activeTask.target_url} target="_blank" className="mt-3 block truncate rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-center text-sm font-semibold text-brand-600 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10">🔗 Buka Link Sasaran</a>}
+            {(activeTask.proof_types?.includes("image") || activeTask.proof_types?.includes("video")) && (
+              <div className="mt-4"><label className="block text-sm font-medium">Muat naik bukti</label><input type="file" accept={[activeTask.proof_types?.includes("image") ? "image/*" : "", activeTask.proof_types?.includes("video") ? "video/*" : ""].filter(Boolean).join(",")} onChange={(e) => setProofFile(e.target.files?.[0] ?? null)} className="mt-1 w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm dark:border-white/10" />{proofFile && <p className="mt-1 text-xs text-brand-500">✓ {proofFile.name}</p>}</div>
             )}
-
-            {needsFile && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium">
-                  Muat naik bukti ({acceptTypes.includes("video") && acceptTypes.includes("image") ? "gambar / video" : acceptTypes.includes("video") ? "video" : "gambar"})
-                </label>
-                <input
-                  type="file"
-                  accept={acceptTypes}
-                  onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
-                  className="mt-1 w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm dark:border-slate-700"
-                />
-                {proofFile && <p className="mt-1 text-xs text-brand-500">✓ {proofFile.name}</p>}
-              </div>
-            )}
-
-            {needsLink && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium">Link / username anda</label>
-                <input
-                  value={proofText}
-                  onChange={(e) => setProofText(e.target.value)}
-                  placeholder="cth: @username_saya"
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950"
-                />
-              </div>
-            )}
-
-            <button
-              onClick={submitProof}
-              disabled={submitting}
-              className="mt-5 w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-            >
-              {submitting ? "Menghantar…" : "Hantar Bukti & Tuntut Ganjaran"}
-            </button>
+            {activeTask.proof_types?.includes("link") && <div className="mt-4"><label className="block text-sm font-medium">Link / username anda</label><input value={proofText} onChange={(e) => setProofText(e.target.value)} placeholder="cth: @username_saya" className="mt-1 w-full rounded-xl px-4 py-2.5" /></div>}
+            <button onClick={submitProof} disabled={submitting} className="pj-btn-primary mt-5 w-full py-3">{submitting ? "Menghantar…" : "Hantar Bukti & Mohon"}</button>
           </div>
         </div>
       )}
 
-      {toast && (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-slate-900">
-          {toast}
-        </div>
-      )}
+      {toast && <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-slate-900">{toast}</div>}
     </div>
   );
 }

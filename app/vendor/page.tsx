@@ -116,7 +116,14 @@ export default function VendorPanel() {
 
   async function decide(id: number, ok: boolean) {
     if (!supabase) return;
-    const { error } = await supabase.rpc(ok ? "approve_submission" : "reject_submission", { p_sub_id: id });
+    let reason = "";
+    if (!ok) {
+      reason = prompt("Sebab tolak (cth: bukti palsu / akaun tidak sah / scam):") ?? "";
+      if (reason === "") return; // cancelled
+    }
+    const { error } = ok
+      ? await supabase.rpc("approve_submission", { p_sub_id: id })
+      : await supabase.rpc("reject_submission", { p_sub_id: id, p_reason: reason });
     if (error) flash("❌ " + error.message);
     else {
       flash(ok ? "✅ Diluluskan — pekerja dibayar dari escrow" : "Submission ditolak");

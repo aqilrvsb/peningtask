@@ -25,9 +25,7 @@ const GROUPS = [
     { key: "vendor-komisen", icon: "💰", label: "Laporan Komisyen" },
     { key: "vendor-withdraw", icon: "🏦", label: "Laporan Pengeluaran" },
   ]},
-  { label: "Operasi", items: [
-    { key: "cipta", icon: "➕", label: "Cipta Tugasan" },
-    { key: "submissions", icon: "✅", label: "Semak Bukti" },
+  { label: "Sistem", items: [
     { key: "sms", icon: "📱", label: "SMS TAC" },
   ]},
 ];
@@ -128,7 +126,14 @@ export default function Admin() {
   }
   async function decide(id: number, okk: boolean) {
     if (!supabase) return;
-    const { error } = await supabase.rpc(okk ? "approve_submission" : "reject_submission", { p_sub_id: id });
+    let reason = "";
+    if (!okk) {
+      reason = prompt("Sebab tolak (cth: bukti palsu / akaun tidak sah / scam):") ?? "";
+      if (reason === "") return;
+    }
+    const { error } = okk
+      ? await supabase.rpc("approve_submission", { p_sub_id: id })
+      : await supabase.rpc("reject_submission", { p_sub_id: id, p_reason: reason });
     if (error) return flash("❌ " + error.message);
     flash(okk ? "✅ Diluluskan" : "Ditolak");
     setSubs((s) => s.filter((x) => x.id !== id));
