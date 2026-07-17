@@ -5,41 +5,53 @@ import Link from "next/link";
 import { Logo } from "@/components/site";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
-type Stats = {
-  users: number;
-  campaigns: number;
-  open_tasks: number;
-  pending_subs: number;
-  pending_withdrawals: number;
-  wallet_total: number;
-};
-type Sub = { id: number; task_id: number; user_id: string; proof: string | null; proof_url: string | null; status: string; created_at: string };
-type Wd = { id: number; user_id: string; amount: number; method: string | null; status: string; created_at: string };
-type User = { id: string; full_name: string | null; whatsapp: string | null; wallet_balance: number; role: string };
+type Stats = { users: number; campaigns: number; open_tasks: number; pending_subs: number; pending_withdrawals: number; wallet_total: number };
 type Plat = { total_fees: number; total_vendors: number; active_campaigns: number; escrow_held: number };
+type UserRow = { id: string; full_name: string | null; whatsapp: string | null; wallet_balance: number; role: string; tasks_done: number; total_earned: number; created_at: string };
+type Sub = { id: number; task_id: number; user_id: string; proof: string | null; proof_url: string | null; status: string; created_at: string };
+type Row = Record<string, unknown>;
 
-const TABS = ["Ringkasan", "Cipta Tugasan", "Submissions", "Pengeluaran", "Pengguna", "SMS TAC"] as const;
-type Tab = (typeof TABS)[number];
+const GROUPS = [
+  { label: null, items: [{ key: "ringkasan", icon: "📊", label: "Ringkasan" }] },
+  { label: "Klien (Community)", items: [
+    { key: "klien", icon: "👥", label: "Senarai Klien" },
+    { key: "klien-tugasan", icon: "📋", label: "Laporan Tugasan" },
+    { key: "klien-komisen", icon: "💰", label: "Laporan Komisyen" },
+    { key: "klien-withdraw", icon: "🏦", label: "Laporan Pengeluaran" },
+  ]},
+  { label: "Vendor (Bisnes)", items: [
+    { key: "vendor", icon: "📣", label: "Senarai Vendor" },
+    { key: "vendor-tugasan", icon: "📋", label: "Laporan Tugasan" },
+    { key: "vendor-komisen", icon: "💰", label: "Laporan Komisyen" },
+    { key: "vendor-withdraw", icon: "🏦", label: "Laporan Pengeluaran" },
+  ]},
+  { label: "Operasi", items: [
+    { key: "cipta", icon: "➕", label: "Cipta Tugasan" },
+    { key: "submissions", icon: "✅", label: "Semak Bukti" },
+    { key: "sms", icon: "📱", label: "SMS TAC" },
+  ]},
+];
 
 const PLATFORMS = ["Facebook", "Threads", "TikTok", "Instagram", "AI"];
-const AI_ACTIONS = ["Create Video AI", "Generate Gambar AI", "Tulis Caption AI"];
-
-function rm(n: number) {
-  return "RM " + Number(n || 0).toFixed(2);
-}
+function rm(n: unknown) { return "RM " + Number(n || 0).toFixed(2); }
+function dt(v: unknown) { return v ? new Date(String(v)).toLocaleString("ms-MY") : "—"; }
 
 export default function Admin() {
   const supabase = hasSupabase ? createClient() : null;
   const [ok, setOk] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<Tab>("Ringkasan");
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [plat, setPlat] = useState<Plat | null>(null);
-  const [subs, setSubs] = useState<Sub[]>([]);
-  const [wds, setWds] = useState<Wd[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [section, setSection] = useState("ringkasan");
+  const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // create-task form
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [plat, setPlat] = useState<Plat | null>(null);
+  const [clients, setClients] = useState<UserRow[]>([]);
+  const [vendors, setVendors] = useState<UserRow[]>([]);
+  const [report, setReport] = useState<Row[]>([]);
+  const [subs, setSubs] = useState<Sub[]>([]);
+  const [loadingReport, setLoadingReport] = useState(false);
+
+  // create task
   const [platform, setPlatform] = useState("Facebook");
   const [action, setAction] = useState("Follow akaun");
   const [reward, setReward] = useState(0.1);
@@ -47,312 +59,234 @@ export default function Admin() {
   const [targetUrl, setTargetUrl] = useState("");
   const [proofTypes, setProofTypes] = useState<string[]>(["image"]);
   const [busy, setBusy] = useState(false);
+  const toggleProof = (p: string) => setProofTypes((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
 
-  // SMS config
+  // sms
   const [smsKey, setSmsKey] = useState("");
   const [smsSecret, setSmsSecret] = useState("");
   const [smsSender, setSmsSender] = useState("PeningJob");
   const [savingSms, setSavingSms] = useState(false);
 
-  const toggleProof = (p: string) =>
-    setProofTypes((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
-  const flash = (m: string) => {
-    setToast(m);
-    setTimeout(() => setToast(null), 3500);
-  };
-
-  const load = useCallback(async () => {
+  const loadCore = useCallback(async () => {
     if (!supabase) return;
     const { data: auth } = await supabase.auth.getUser();
-    if (!auth.user) {
-      window.location.href = "/log-masuk";
-      return;
-    }
+    if (!auth.user) { window.location.href = "/log-masuk"; return; }
     const { data: prof } = await supabase.from("profiles").select("role").eq("id", auth.user.id).single();
-    if (prof?.role !== "admin") {
-      setOk(false);
-      return;
-    }
+    if (prof?.role !== "admin") { setOk(false); return; }
     setOk(true);
-    const [st, sb, wd, us, pf] = await Promise.all([
+    const [st, pf, sms] = await Promise.all([
       supabase.rpc("admin_stats"),
-      supabase.from("submissions").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-      supabase.from("withdrawals").select("*").eq("status", "requested").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("id,full_name,whatsapp,wallet_balance,role").order("created_at", { ascending: false }).limit(100),
       supabase.rpc("platform_stats"),
+      supabase.rpc("admin_get_sms_config"),
     ]);
     setStats((st.data as Stats) ?? null);
-    setSubs((sb.data as Sub[]) ?? []);
-    setWds((wd.data as Wd[]) ?? []);
-    setUsers((us.data as User[]) ?? []);
-    const p = Array.isArray(pf.data) ? pf.data[0] : pf.data;
-    setPlat((p as Plat) ?? null);
-
-    const { data: sms } = await supabase.rpc("admin_get_sms_config");
-    const s = Array.isArray(sms) ? sms[0] : sms;
-    if (s) {
-      setSmsKey(s.app_key ?? "");
-      setSmsSecret(s.app_secret ?? "");
-      setSmsSender(s.sender ?? "PeningJob");
-    }
+    setPlat((Array.isArray(pf.data) ? pf.data[0] : pf.data) as Plat);
+    const s = Array.isArray(sms.data) ? sms.data[0] : sms.data;
+    if (s) { setSmsKey(s.app_key ?? ""); setSmsSecret(s.app_secret ?? ""); setSmsSender(s.sender ?? "PeningJob"); }
   }, [supabase]);
 
+  useEffect(() => { loadCore(); }, [loadCore]);
+
+  // Lazy-load per section
   useEffect(() => {
-    load();
-  }, [load]);
-
-  async function createTasks() {
-    if (!supabase) return;
-    if (proofTypes.length === 0) {
-      flash("⚠️ Pilih sekurang-kurangnya satu jenis bukti");
-      return;
-    }
-    setBusy(true);
-    const { error } = await supabase.rpc("admin_create_tasks", {
-      p_platform: platform,
-      p_service_type: platform === "AI" ? "AI Task" : "Engagement",
-      p_action: action,
-      p_reward: reward,
-      p_count: count,
-      p_proof_types: proofTypes,
-      p_target_url: targetUrl || null,
-    });
-    setBusy(false);
-    if (error) flash("❌ " + error.message);
-    else {
-      flash(`✅ ${count} tugasan "${action}" dicipta`);
-      load();
-    }
-  }
-
-  async function approve(id: number) {
-    if (!supabase) return;
-    const { error } = await supabase.rpc("approve_submission", { p_sub_id: id });
-    flash(error ? "❌ " + error.message : "✅ Diluluskan, wallet dikreditkan");
-    load();
-  }
-  async function reject(id: number) {
-    if (!supabase) return;
-    const { error } = await supabase.rpc("reject_submission", { p_sub_id: id });
-    flash(error ? "❌ " + error.message : "↩️ Ditolak, tugasan dibuka semula");
-    load();
-  }
-  async function saveSms() {
-    if (!supabase) return;
-    setSavingSms(true);
-    const { error } = await supabase.rpc("admin_set_sms_config", {
-      p_key: smsKey,
-      p_secret: smsSecret,
-      p_sender: smsSender,
-    });
-    setSavingSms(false);
-    if (error) flash("❌ " + error.message);
-    else flash("✅ Konfigurasi SMS disimpan");
-  }
+    if (!supabase || ok !== true) return;
+    (async () => {
+      setLoadingReport(true);
+      try {
+        if (section === "klien") setClients(((await supabase.rpc("admin_users_by_role", { p_role: "user" })).data as UserRow[]) ?? []);
+        else if (section === "vendor") setVendors(((await supabase.rpc("admin_users_by_role", { p_role: "vendor" })).data as UserRow[]) ?? []);
+        else if (section === "klien-tugasan") setReport(((await supabase.rpc("admin_client_tasks")).data as Row[]) ?? []);
+        else if (section === "vendor-tugasan") setReport(((await supabase.rpc("admin_vendor_tasks")).data as Row[]) ?? []);
+        else if (section === "klien-komisen") setReport(((await supabase.rpc("admin_commission_report", { p_role: "user" })).data as Row[]) ?? []);
+        else if (section === "vendor-komisen") setReport(((await supabase.rpc("admin_commission_report", { p_role: "vendor" })).data as Row[]) ?? []);
+        else if (section === "klien-withdraw") setReport(((await supabase.rpc("admin_withdrawal_report", { p_role: "user" })).data as Row[]) ?? []);
+        else if (section === "vendor-withdraw") setReport(((await supabase.rpc("admin_withdrawal_report", { p_role: "vendor" })).data as Row[]) ?? []);
+        else if (section === "submissions") setSubs(((await supabase.from("submissions").select("*").eq("status", "pending").order("created_at", { ascending: false })).data as Sub[]) ?? []);
+      } finally { setLoadingReport(false); }
+    })();
+  }, [section, supabase, ok]);
 
   async function setRole(id: string, role: "user" | "vendor") {
     if (!supabase) return;
     const { error } = await supabase.rpc("admin_set_role", { p_user: id, p_role: role });
-    if (error) flash("❌ " + error.message);
-    else {
-      flash(role === "vendor" ? "✅ Dinaik taraf ke Vendor" : "✅ Ditukar ke Pengguna");
-      load();
-    }
+    if (error) return flash("❌ " + error.message);
+    flash(role === "vendor" ? "✅ Dinaik taraf ke Vendor" : "✅ Ditukar ke Klien");
+    setSection((s) => s); // trigger reload
+    if (role === "vendor") setClients((c) => c.filter((u) => u.id !== id));
+    else setVendors((v) => v.filter((u) => u.id !== id));
   }
-
+  async function delUser(id: string, name: string | null) {
+    if (!supabase) return;
+    if (!window.confirm(`Padam akaun "${name || id}"? Tindakan ini kekal.`)) return;
+    const { error } = await supabase.rpc("admin_delete_user", { p_id: id });
+    if (error) return flash("❌ " + error.message);
+    flash("🗑️ Akaun dipadam");
+    setClients((c) => c.filter((u) => u.id !== id));
+    setVendors((v) => v.filter((u) => u.id !== id));
+  }
+  async function decide(id: number, okk: boolean) {
+    if (!supabase) return;
+    const { error } = await supabase.rpc(okk ? "approve_submission" : "reject_submission", { p_sub_id: id });
+    if (error) return flash("❌ " + error.message);
+    flash(okk ? "✅ Diluluskan" : "Ditolak");
+    setSubs((s) => s.filter((x) => x.id !== id));
+    loadCore();
+  }
   async function processWd(id: number, approve: boolean) {
     if (!supabase) return;
     const { error } = await supabase.rpc("process_withdrawal", { p_id: id, p_approve: approve });
-    flash(error ? "❌ " + error.message : approve ? "✅ Pengeluaran dibayar" : "↩️ Ditolak & direfund");
-    load();
+    if (error) return flash("❌ " + error.message);
+    flash(approve ? "💸 Dibayar" : "Ditolak");
+    setReport((r) => r.filter((x) => x.id !== id));
+  }
+  async function createTasks() {
+    if (!supabase) return;
+    if (proofTypes.length === 0) return flash("⚠️ Pilih jenis bukti");
+    setBusy(true);
+    const { error } = await supabase.rpc("admin_create_tasks", {
+      p_platform: platform, p_service_type: platform === "AI" ? "AI Task" : "Engagement",
+      p_action: action, p_reward: reward, p_count: count, p_proof_types: proofTypes, p_target_url: targetUrl || null,
+    });
+    setBusy(false);
+    if (error) return flash("❌ " + error.message);
+    flash(`✅ ${count} tugasan dicipta`); loadCore();
+  }
+  async function saveSms() {
+    if (!supabase) return;
+    setSavingSms(true);
+    const { error } = await supabase.rpc("admin_set_sms_config", { p_key: smsKey, p_secret: smsSecret, p_sender: smsSender });
+    setSavingSms(false);
+    flash(error ? "❌ " + error.message : "✅ Konfigurasi SMS disimpan");
   }
 
   if (ok === false)
-    return (
-      <div className="grid min-h-screen place-items-center text-center">
-        <div>
-          <p className="text-lg font-semibold">Akses ditolak 🔒</p>
-          <p className="mt-1 text-slate-500">Halaman ini untuk admin sahaja.</p>
-          <Link href="/dashboard" className="mt-4 inline-block text-brand-500 hover:underline">← Kembali ke Dashboard</Link>
-        </div>
-      </div>
-    );
+    return <div className="grid min-h-screen place-items-center px-4"><div className="pj-card p-8 text-center"><p className="text-3xl">🔒</p><p className="mt-2 font-bold">Akses admin sahaja</p><Link href="/dashboard" className="pj-btn-primary mt-4 inline-flex px-5 py-2.5">Dashboard</Link></div></div>;
+
+  const activeLabel = GROUPS.flatMap((g) => g.items).find((i) => i.key === section)?.label ?? "Ringkasan";
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen lg:flex">
+      {/* Sidebar */}
+      <aside className={`${navOpen ? "block" : "hidden"} border-r border-slate-200/70 bg-white/70 backdrop-blur lg:block lg:w-64 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
+        <div className="sticky top-0 max-h-screen overflow-y-auto p-4">
+          <div className="flex items-center justify-between">
             <Logo />
-            <span className="rounded-md bg-slate-900 px-2 py-0.5 text-xs font-bold text-white dark:bg-white dark:text-slate-900">ADMIN</span>
+            <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white dark:bg-white dark:text-slate-900">ADMIN</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="text-sm font-semibold text-slate-500 hover:text-brand-500">Dashboard</Link>
-            <button
-              onClick={async () => {
-                if (supabase) await supabase.auth.signOut();
-                window.location.href = "/log-masuk";
-              }}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-            >
-              Log Keluar
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        {/* stats */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {[
-            { l: "Pengguna", v: stats?.users ?? 0 },
-            { l: "Kempen", v: stats?.campaigns ?? 0 },
-            { l: "Tugasan Terbuka", v: stats?.open_tasks ?? 0 },
-            { l: "Submission Baru", v: stats?.pending_subs ?? 0, hot: true },
-            { l: "Withdraw Baru", v: stats?.pending_withdrawals ?? 0, hot: true },
-            { l: "Jumlah Wallet", v: rm(stats?.wallet_total ?? 0) },
-            { l: "💰 Fee Platform (Untung)", v: rm(plat?.total_fees ?? 0), gold: true },
-            { l: "Vendor Aktif", v: plat?.total_vendors ?? 0 },
-            { l: "Escrow Dipegang", v: rm(plat?.escrow_held ?? 0) },
-          ].map((s: { l: string; v: string | number; hot?: boolean; gold?: boolean }) => (
-            <div key={s.l} className={`rounded-2xl border p-4 ${s.gold ? "border-amber-400 bg-amber-50 dark:bg-amber-500/10" : s.hot && Number(s.v) > 0 ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
-              <p className="text-xs text-slate-500">{s.l}</p>
-              <p className="mt-1 text-xl font-bold">{s.v}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* tabs */}
-        <div className="mt-8 flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === t ? "border-brand-500 text-brand-500" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`}
-            >
-              {t}
-              {t === "Submissions" && subs.length > 0 && <span className="ml-1.5 rounded-full bg-brand-500 px-1.5 text-xs text-white">{subs.length}</span>}
-              {t === "Pengeluaran" && wds.length > 0 && <span className="ml-1.5 rounded-full bg-brand-500 px-1.5 text-xs text-white">{wds.length}</span>}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-6">
-          {tab === "Ringkasan" && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-lg font-semibold">Panel Kawalan Admin</h2>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                Cipta tugasan untuk pengguna, luluskan submission (wallet dikreditkan automatik),
-                dan proses permohonan pengeluaran. Semua data live dari Supabase.
-              </p>
-            </div>
-          )}
-
-          {tab === "Cipta Tugasan" && (
-            <div className="max-w-lg rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-lg font-semibold">Cipta Tugasan Baru</h2>
-              <label className="mt-4 block text-sm font-medium">Kategori</label>
-              <select
-                value={platform}
-                onChange={(e) => {
-                  const p = e.target.value;
-                  setPlatform(p);
-                  setAction(p === "AI" ? AI_ACTIONS[0] : "Follow akaun");
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950"
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
-
-              <label className="mt-4 block text-sm font-medium">Arahan tugasan</label>
-              {platform === "AI" ? (
-                <select value={action} onChange={(e) => setAction(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950">
-                  {AI_ACTIONS.map((a) => (
-                    <option key={a}>{a}</option>
+          <nav className="mt-6 space-y-5">
+            {GROUPS.map((g, gi) => (
+              <div key={gi}>
+                {g.label && <p className="px-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">{g.label}</p>}
+                <div className="mt-1.5 space-y-0.5">
+                  {g.items.map((it) => (
+                    <button
+                      key={it.key}
+                      onClick={() => { setSection(it.key); setNavOpen(false); }}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${
+                        section === it.key ? "bg-brand-gradient text-white shadow-glow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+                      }`}
+                    >
+                      <span className="text-base">{it.icon}</span>
+                      {it.label}
+                      {it.key === "submissions" && (stats?.pending_subs ?? 0) > 0 && (
+                        <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">{stats?.pending_subs}</span>
+                      )}
+                    </button>
                   ))}
-                </select>
-              ) : (
-                <input value={action} onChange={(e) => setAction(e.target.value)} placeholder="cth: Follow & like 3 post" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-              )}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <Link href="/dashboard" className="mt-6 block rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">← Kembali ke Dashboard</Link>
+        </div>
+      </aside>
 
-              <label className="mt-4 block text-sm font-medium">Link sasaran (akaun/post untuk pengguna buka)</label>
-              <input
-                value={targetUrl}
-                onChange={(e) => setTargetUrl(e.target.value)}
-                placeholder="https://www.tiktok.com/@akaun"
-                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950"
-              />
+      {/* Content */}
+      <main className="min-w-0 flex-1">
+        <header className="pj-glass sticky top-0 z-20 flex items-center justify-between px-4 py-3 lg:px-8">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setNavOpen((v) => !v)} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 lg:hidden dark:border-white/10">☰</button>
+            <div>
+              <h1 className="text-lg font-extrabold tracking-tight">{activeLabel}</h1>
+              <p className="text-xs text-slate-500">Panel Kawalan PeningJob</p>
+            </div>
+          </div>
+          <button onClick={async () => { if (supabase) await supabase.auth.signOut(); window.location.href = "/log-masuk"; }} className="pj-btn-ghost px-3.5 py-2">Log Keluar</button>
+        </header>
 
-              <label className="mt-4 block text-sm font-medium">Jenis bukti diperlukan</label>
-              <div className="mt-2 flex flex-wrap gap-2">
+        <div className="p-4 lg:p-8">
+          {/* RINGKASAN */}
+          {section === "ringkasan" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-extrabold">Selamat kembali, Admin! 👋</h2>
+                <p className="text-slate-500">Ringkasan sistem &amp; prestasi platform.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                 {[
-                  { k: "image", l: "📷 Gambar" },
-                  { k: "video", l: "🎬 Video" },
-                  { k: "link", l: "🔗 Link/Username" },
-                ].map((p) => (
-                  <button
-                    key={p.k}
-                    type="button"
-                    onClick={() => toggleProof(p.k)}
-                    className={`rounded-full px-4 py-1.5 text-sm font-medium ${
-                      proofTypes.includes(p.k)
-                        ? "bg-brand-500 text-white"
-                        : "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                    }`}
-                  >
-                    {p.l}
-                  </button>
+                  { l: "Jumlah Pengguna", v: stats?.users ?? 0, icon: "👤" },
+                  { l: "Klien Aktif Tugasan", v: stats?.open_tasks ?? 0, icon: "📋" },
+                  { l: "Vendor", v: plat?.total_vendors ?? 0, icon: "📣" },
+                  { l: "Submission Menunggu", v: stats?.pending_subs ?? 0, icon: "✅", hot: true },
+                  { l: "Withdraw Menunggu", v: stats?.pending_withdrawals ?? 0, icon: "🏦", hot: true },
+                  { l: "Jumlah Wallet", v: rm(stats?.wallet_total), icon: "👛" },
+                ].map((s) => (
+                  <div key={s.l} className={`pj-card p-5 ${s.hot && Number(s.v) > 0 ? "ring-1 ring-rose-300" : ""}`}>
+                    <div className="flex items-center justify-between"><p className="text-sm text-slate-500">{s.l}</p><span className="text-xl">{s.icon}</span></div>
+                    <p className="mt-2 text-2xl font-extrabold">{s.v}</p>
+                  </div>
                 ))}
               </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium">Ganjaran (RM)</label>
-                  <input type="number" step="0.01" min="0.01" value={reward} onChange={(e) => setReward(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Bilangan</label>
-                  <input type="number" min="1" max="1000" value={count} onChange={(e) => setCount(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-                </div>
+              <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
+                <p className="text-sm text-white/80">💰 Pendapatan Platform (fee terkumpul)</p>
+                <p className="mt-1 text-4xl font-extrabold">{rm(plat?.total_fees)}</p>
+                <p className="mt-1 text-sm text-white/80">Escrow dipegang: {rm(plat?.escrow_held)}</p>
               </div>
-
-              <button onClick={createTasks} disabled={busy} className="mt-5 w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
-                {busy ? "Mencipta…" : `Cipta ${count} Tugasan`}
-              </button>
             </div>
           )}
 
-          {tab === "Submissions" && (
+          {/* CRUD KLIEN / VENDOR */}
+          {(section === "klien" || section === "vendor") && (
+            <UserTable
+              rows={section === "klien" ? clients : vendors}
+              isVendor={section === "vendor"}
+              loading={loadingReport}
+              onRole={setRole}
+              onDelete={delUser}
+            />
+          )}
+
+          {/* REPORTS */}
+          {section === "klien-tugasan" && <ReportTable loading={loadingReport} rows={report} cols={[["user_name", "Klien"], ["whatsapp", "Telefon"], ["platform", "Platform"], ["action", "Tugasan"], ["reward", "Ganjaran", "rm"], ["status", "Status"], ["created_at", "Tarikh", "dt"]]} empty="Tiada tugasan klien lagi." />}
+          {section === "vendor-tugasan" && <ReportTable loading={loadingReport} rows={report} cols={[["vendor_name", "Vendor"], ["platform", "Platform"], ["service_type", "Servis"], ["quantity", "Kuantiti"], ["delivered", "Siap"], ["cost", "Kos", "rm"], ["fee", "Fee", "rm"], ["status", "Status"], ["created_at", "Tarikh", "dt"]]} empty="Tiada kempen vendor lagi." />}
+          {section === "klien-komisen" && <ReportTable loading={loadingReport} rows={report} cols={[["user_name", "Klien"], ["whatsapp", "Telefon"], ["amount", "Komisyen", "rm"], ["note", "Nota"], ["created_at", "Tarikh", "dt"]]} empty="Tiada komisyen klien lagi." />}
+          {section === "vendor-komisen" && <ReportTable loading={loadingReport} rows={report} cols={[["user_name", "Vendor"], ["whatsapp", "Telefon"], ["amount", "Komisyen", "rm"], ["note", "Nota"], ["created_at", "Tarikh", "dt"]]} empty="Tiada komisyen vendor lagi." />}
+          {section === "klien-withdraw" && <WithdrawTable loading={loadingReport} rows={report} onProcess={processWd} />}
+          {section === "vendor-withdraw" && <WithdrawTable loading={loadingReport} rows={report} onProcess={processWd} />}
+
+          {/* SUBMISSIONS */}
+          {section === "submissions" && (
             <div className="space-y-3">
-              {subs.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 dark:border-slate-700">Tiada submission menunggu ✅</p>}
+              {subs.length === 0 && <p className="pj-card p-10 text-center text-slate-400">Tiada submission menunggu ✅</p>}
               {subs.map((s) => {
                 const isVideo = s.proof_url ? /\.(mp4|webm|mov|m4v)($|\?)/i.test(s.proof_url) : false;
                 return (
-                  <div key={s.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <div key={s.id} className="pj-card p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold">Tugasan #{s.task_id}</p>
-                        {s.proof && <p className="text-sm text-slate-500">🔗 Bukti teks: {s.proof}</p>}
-                        <p className="text-xs text-slate-400">User {s.user_id.slice(0, 8)}… · {new Date(s.created_at).toLocaleString("ms-MY")}</p>
-                        {s.proof_url && (
-                          <div className="mt-3">
-                            {isVideo ? (
-                              <video src={s.proof_url} controls className="max-h-56 rounded-xl border border-slate-200 dark:border-slate-700" />
-                            ) : (
-                              <a href={s.proof_url} target="_blank">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={s.proof_url} alt="Bukti" className="max-h-56 rounded-xl border border-slate-200 object-contain dark:border-slate-700" />
-                              </a>
-                            )}
-                          </div>
-                        )}
+                        {s.proof && <p className="text-sm text-slate-500">🔗 {s.proof}</p>}
+                        <p className="text-xs text-slate-400">User {s.user_id.slice(0, 8)}… · {dt(s.created_at)}</p>
+                        {s.proof_url && (isVideo
+                          ? <video src={s.proof_url} controls className="mt-3 max-h-56 rounded-xl border border-slate-200 dark:border-white/10" />
+                          // eslint-disable-next-line @next/next/no-img-element
+                          : <a href={s.proof_url} target="_blank"><img src={s.proof_url} alt="Bukti" className="mt-3 max-h-56 rounded-xl border border-slate-200 object-contain dark:border-white/10" /></a>)}
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => approve(s.id)} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Lulus</button>
-                        <button onClick={() => reject(s.id)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Tolak</button>
+                        <button onClick={() => decide(s.id, true)} className="pj-btn-primary px-4 py-2">Lulus</button>
+                        <button onClick={() => decide(s.id, false)} className="pj-btn-ghost px-4 py-2">Tolak</button>
                       </div>
                     </div>
                   </div>
@@ -361,93 +295,139 @@ export default function Admin() {
             </div>
           )}
 
-          {tab === "Pengeluaran" && (
-            <div className="space-y-3">
-              {wds.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 dark:border-slate-700">Tiada permohonan pengeluaran ✅</p>}
-              {wds.map((w) => (
-                <div key={w.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <div>
-                    <p className="font-semibold text-brand-500">{rm(w.amount)}</p>
-                    <p className="text-sm text-slate-500">{w.method}</p>
-                    <p className="text-xs text-slate-400">User {w.user_id.slice(0, 8)}…</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => processWd(w.id, true)} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Bayar</button>
-                    <button onClick={() => processWd(w.id, false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Tolak</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {tab === "Pengguna" && (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/50">
-                  <tr>
-                    <th className="px-4 py-3">Nama</th>
-                    <th className="px-4 py-3">WhatsApp</th>
-                    <th className="px-4 py-3">Wallet</th>
-                    <th className="px-4 py-3">Peranan</th>
-                    <th className="px-4 py-3">Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-4 py-3 font-medium">{u.full_name || "—"}</td>
-                      <td className="px-4 py-3">{u.whatsapp || "—"}</td>
-                      <td className="px-4 py-3">{rm(u.wallet_balance)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.role === "admin" ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : u.role === "vendor" ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}>{u.role}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {u.role === "user" && (
-                          <button onClick={() => setRole(u.id, "vendor")} className="rounded-lg bg-brand-500 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-600">
-                            ↑ Jadikan Vendor
-                          </button>
-                        )}
-                        {u.role === "vendor" && (
-                          <button onClick={() => setRole(u.id, "user")} className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
-                            ↓ Jadikan User
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {tab === "SMS TAC" && (
-            <div className="max-w-lg rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-lg font-semibold">Konfigurasi SMS TAC (360 Bulk SMS)</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Kod TAC pendaftaran dihantar melalui gerbang 360. Masukkan kredensial API anda di sini.
-              </p>
-              <label className="mt-5 block text-sm font-medium">APP_KEY (user)</label>
-              <input value={smsKey} onChange={(e) => setSmsKey(e.target.value)} placeholder="cth: 7LrdwRb1Ya" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 font-mono text-sm dark:border-slate-700 dark:bg-slate-950" />
-              <label className="mt-4 block text-sm font-medium">APP_SECRET (pass)</label>
-              <input value={smsSecret} onChange={(e) => setSmsSecret(e.target.value)} placeholder="cth: aAjc9I7mW5eGzxwY…" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 font-mono text-sm dark:border-slate-700 dark:bg-slate-950" />
-              <label className="mt-4 block text-sm font-medium">Sender ID (from)</label>
-              <input value={smsSender} onChange={(e) => setSmsSender(e.target.value)} placeholder="PeningJob" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
-              <button onClick={saveSms} disabled={savingSms} className="mt-5 w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
-                {savingSms ? "Menyimpan…" : "Simpan Konfigurasi SMS"}
-              </button>
-              <div className="mt-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                ⚠️ Penting: 360 memerlukan <b>IP server di-whitelist</b>. Server Vercel guna IP dinamik — pastikan anda whitelist julat IP Vercel di 360 (Configurations → Whitelist IPs), atau guna proksi IP statik. Tanpa ini, 360 pulangkan kod 403.
+          {/* CIPTA TUGASAN */}
+          {section === "cipta" && (
+            <div className="max-w-xl pj-card p-6">
+              <h2 className="text-lg font-semibold">Cipta Tugasan Baru</h2>
+              <label className="mt-4 block text-sm font-medium">Kategori</label>
+              <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5">{PLATFORMS.map((p) => <option key={p}>{p}</option>)}</select>
+              <label className="mt-4 block text-sm font-medium">Arahan tugasan</label>
+              <input value={action} onChange={(e) => setAction(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+              <label className="mt-4 block text-sm font-medium">Link sasaran</label>
+              <input value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} placeholder="https://…" className="mt-1 w-full rounded-xl px-4 py-2.5" />
+              <label className="mt-4 block text-sm font-medium">Jenis bukti</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[["image", "📷 Gambar"], ["video", "🎬 Video"], ["link", "🔗 Link"]].map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => toggleProof(k)} className={`rounded-full px-4 py-1.5 text-sm font-medium ${proofTypes.includes(k) ? "bg-brand-gradient text-white" : "border border-slate-300 text-slate-600 dark:border-white/10 dark:text-slate-300"}`}>{l}</button>
+                ))}
               </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div><label className="block text-sm font-medium">Ganjaran (RM)</label><input type="number" step="0.01" min="0.01" value={reward} onChange={(e) => setReward(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" /></div>
+                <div><label className="block text-sm font-medium">Bilangan</label><input type="number" min="1" max="1000" value={count} onChange={(e) => setCount(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" /></div>
+              </div>
+              <button onClick={createTasks} disabled={busy} className="pj-btn-primary mt-5 w-full py-3">{busy ? "Mencipta…" : `Cipta ${count} Tugasan`}</button>
+            </div>
+          )}
+
+          {/* SMS */}
+          {section === "sms" && (
+            <div className="max-w-lg pj-card p-6">
+              <h2 className="text-lg font-semibold">Konfigurasi SMS TAC (360)</h2>
+              <p className="mt-1 text-sm text-slate-500">Kod TAC pendaftaran dihantar melalui gerbang 360.</p>
+              <label className="mt-5 block text-sm font-medium">API Key (APP_KEY)</label>
+              <input value={smsKey} onChange={(e) => setSmsKey(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5 font-mono text-sm" />
+              <label className="mt-4 block text-sm font-medium">API Secret (APP_SECRET)</label>
+              <input value={smsSecret} onChange={(e) => setSmsSecret(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5 font-mono text-sm" />
+              <label className="mt-4 block text-sm font-medium">Sender ID</label>
+              <input value={smsSender} onChange={(e) => setSmsSender(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+              <button onClick={saveSms} disabled={savingSms} className="pj-btn-primary mt-5 w-full py-3">{savingSms ? "Menyimpan…" : "Simpan Konfigurasi SMS"}</button>
+              <div className="mt-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">💡 Di 360 → Whitelist IPs, masukkan <b>0.0.0.0</b> (semua IP) supaya SMS jalan dari Vercel tanpa proksi.</div>
             </div>
           )}
         </div>
-      </div>
+      </main>
 
-      {toast && (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-slate-900">
-          {toast}
-        </div>
-      )}
+      {toast && <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-slate-900">{toast}</div>}
+    </div>
+  );
+}
+
+function UserTable({ rows, isVendor, loading, onRole, onDelete }: { rows: UserRow[]; isVendor: boolean; loading: boolean; onRole: (id: string, r: "user" | "vendor") => void; onDelete: (id: string, n: string | null) => void }) {
+  if (loading) return <p className="pj-card p-10 text-center text-slate-400">Memuatkan…</p>;
+  if (rows.length === 0) return <p className="pj-card p-10 text-center text-slate-400">Tiada {isVendor ? "vendor" : "klien"} lagi.</p>;
+  return (
+    <div className="pj-card overflow-x-auto p-0">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 text-slate-500 dark:bg-white/5"><tr>
+          <th className="px-4 py-3">Nama</th><th className="px-4 py-3">Telefon</th><th className="px-4 py-3">Wallet</th>
+          <th className="px-4 py-3">Tugasan</th><th className="px-4 py-3">Diperoleh</th><th className="px-4 py-3">Sertai</th><th className="px-4 py-3">Tindakan</th>
+        </tr></thead>
+        <tbody>
+          {rows.map((u) => (
+            <tr key={u.id} className="border-t border-slate-100 dark:border-white/5">
+              <td className="px-4 py-3 font-medium">{u.full_name || "—"}</td>
+              <td className="px-4 py-3">{u.whatsapp || "—"}</td>
+              <td className="px-4 py-3">{rm(u.wallet_balance)}</td>
+              <td className="px-4 py-3">{u.tasks_done}</td>
+              <td className="px-4 py-3">{rm(u.total_earned)}</td>
+              <td className="px-4 py-3 text-xs text-slate-400">{dt(u.created_at)}</td>
+              <td className="px-4 py-3">
+                <div className="flex gap-2">
+                  {isVendor
+                    ? <button onClick={() => onRole(u.id, "user")} className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold dark:border-white/10">↓ Klien</button>
+                    : <button onClick={() => onRole(u.id, "vendor")} className="rounded-lg bg-brand-gradient px-3 py-1 text-xs font-semibold text-white">↑ Vendor</button>}
+                  <button onClick={() => onDelete(u.id, u.full_name)} className="rounded-lg border border-rose-300 px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/30">Padam</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function fmt(v: unknown, kind?: string) { return kind === "rm" ? rm(v) : kind === "dt" ? dt(v) : (v == null || v === "" ? "—" : String(v)); }
+
+function ReportTable({ rows, cols, empty, loading }: { rows: Row[]; cols: (string[])[]; empty: string; loading: boolean }) {
+  if (loading) return <p className="pj-card p-10 text-center text-slate-400">Memuatkan…</p>;
+  if (rows.length === 0) return <p className="pj-card p-10 text-center text-slate-400">{empty}</p>;
+  return (
+    <div className="pj-card overflow-x-auto p-0">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 text-slate-500 dark:bg-white/5"><tr>{cols.map((c) => <th key={c[0]} className="px-4 py-3">{c[1]}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-slate-100 dark:border-white/5">
+              {cols.map((c) => <td key={c[0]} className="px-4 py-3">{fmt(r[c[0]], c[2])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WithdrawTable({ rows, onProcess, loading }: { rows: Row[]; onProcess: (id: number, ap: boolean) => void; loading: boolean }) {
+  if (loading) return <p className="pj-card p-10 text-center text-slate-400">Memuatkan…</p>;
+  if (rows.length === 0) return <p className="pj-card p-10 text-center text-slate-400">Tiada pengeluaran lagi.</p>;
+  return (
+    <div className="pj-card overflow-x-auto p-0">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 text-slate-500 dark:bg-white/5"><tr>
+          <th className="px-4 py-3">Nama</th><th className="px-4 py-3">Telefon</th><th className="px-4 py-3">Jumlah</th>
+          <th className="px-4 py-3">Kaedah</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tindakan</th>
+        </tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={String(r.id)} className="border-t border-slate-100 dark:border-white/5">
+              <td className="px-4 py-3 font-medium">{fmt(r.user_name)}</td>
+              <td className="px-4 py-3">{fmt(r.whatsapp)}</td>
+              <td className="px-4 py-3 font-bold">{rm(r.amount)}</td>
+              <td className="px-4 py-3">{fmt(r.method)}</td>
+              <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${r.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : r.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{String(r.status)}</span></td>
+              <td className="px-4 py-3">
+                {r.status === "requested" ? (
+                  <div className="flex gap-2">
+                    <button onClick={() => onProcess(Number(r.id), true)} className="pj-btn-primary px-3 py-1.5">Bayar</button>
+                    <button onClick={() => onProcess(Number(r.id), false)} className="pj-btn-ghost px-3 py-1.5">Tolak</button>
+                  </div>
+                ) : <span className="text-xs text-slate-400">Selesai</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

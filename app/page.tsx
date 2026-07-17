@@ -15,19 +15,19 @@ const STEPS = [
     n: "1",
     title: "Daftar & Pilih Tugasan",
     body: "Daftar percuma dengan pengesahan TAC, kemudian pilih tugasan ringkas — follow, like atau komen — yang anda suka.",
-    icon: "🙌",
+    img: "/step1.png",
   },
   {
     n: "2",
     title: "Siapkan & Hantar Bukti",
     body: "Selesaikan tugasan dalam beberapa minit, muat naik bukti (gambar/video/link), dan hantar untuk semakan.",
-    icon: "📸",
+    img: "/step2.png",
   },
   {
     n: "3",
     title: "Dapat Ganjaran & Withdraw",
     body: "Ganjaran masuk terus ke wallet anda selepas disahkan. Kumpul XP, naik level, dan withdraw ke bank bila-bila masa.",
-    icon: "💸",
+    img: "/step3.png",
   },
 ];
 
@@ -161,9 +161,12 @@ export default function Home() {
           <div className="pointer-events-none absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-transparent via-brand-300/60 to-transparent md:block" />
           {STEPS.map((s) => (
             <div key={s.n} className="pj-card pj-card-hover relative p-7">
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-gradient text-2xl shadow-glow-sm">
-                {s.icon}
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={s.img}
+                alt={s.title}
+                className="h-20 w-20 rounded-2xl object-cover shadow-glow-sm"
+              />
               <div className="absolute right-6 top-6 text-5xl font-black text-slate-100 dark:text-white/5">
                 {s.n}
               </div>
