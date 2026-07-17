@@ -84,7 +84,18 @@ export async function POST(req: Request) {
     let providerCode = 0;
     let providerDesc = "";
     try {
-      const res = await fetch(url, { method: "GET", cache: "no-store" });
+      // Route through a static-IP proxy (QuotaGuard/Fixie) so 360 sees one
+      // whitelistable IP. Set SMS_PROXY_URL in Vercel once you have the proxy.
+      const fetchOpts: RequestInit & { dispatcher?: unknown } = {
+        method: "GET",
+        cache: "no-store",
+      };
+      const proxyUrl = process.env.SMS_PROXY_URL;
+      if (proxyUrl) {
+        const { ProxyAgent } = await import("undici");
+        fetchOpts.dispatcher = new ProxyAgent(proxyUrl);
+      }
+      const res = await fetch(url, fetchOpts);
       const bodyText = await res.text();
       try {
         const j = JSON.parse(bodyText);
