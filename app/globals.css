@@ -3,7 +3,28 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+/* All form controls: dark field + white text (consistent & readable) */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    color-scheme: dark;
+    background-color: #1e293b; /* slate-800 */
+    color: #ffffff;
+    border-color: #334155; /* slate-700 */
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: #94a3b8; /* slate-400 */
+    opacity: 1;
+  }
+  select option {
+    background-color: #1e293b;
+    color: #ffffff;
+  }
 }
 
 html {
@@ -90,9 +111,8 @@ body {
   }
 
   .pj-input {
-    @apply w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm outline-none
-           transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/15
-           dark:border-white/10 dark:bg-white/5;
+    @apply w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none
+           transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/25;
   }
 }
 

@@ -44,7 +44,7 @@ export default function LoginPage() {
             placeholder="Emel"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-950"
+            className="pj-input"
           />
           <input
             type="password"
@@ -52,7 +52,7 @@ export default function LoginPage() {
             placeholder="Kata laluan"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-950"
+            className="pj-input"
           />
           <div className="text-right">
             <Link href="/lupa-kata-laluan" className="text-sm text-brand-500 hover:underline">
