@@ -13,21 +13,21 @@ const PLATFORMS = [
 const STEPS = [
   {
     n: "1",
-    title: "Pilih & Lancar Kempen",
-    body: "Bisnes pilih platform dan cipta kempen. Tetapkan sasaran follow, like atau komen yang dikehendaki.",
-    icon: "🎯",
+    title: "Daftar & Pilih Tugasan",
+    body: "Daftar percuma dengan pengesahan TAC, kemudian pilih tugasan ringkas — follow, like atau komen — yang anda suka.",
+    icon: "🙌",
   },
   {
     n: "2",
-    title: "Komuniti Selesaikan Tugasan",
-    body: "Ahli PeningJob yang aktif menyelesaikan tugasan ringkas mengikut arahan dan dibayar ganjaran tunai.",
-    icon: "⚡",
+    title: "Siapkan & Hantar Bukti",
+    body: "Selesaikan tugasan dalam beberapa minit, muat naik bukti (gambar/video/link), dan hantar untuk semakan.",
+    icon: "📸",
   },
   {
     n: "3",
-    title: "Engagement Sebenar Masuk",
-    body: "Interaksi datang daripada akaun pengguna sebenar Malaysia — beransur & natural, bukan angka mendadak.",
-    icon: "📈",
+    title: "Dapat Ganjaran & Withdraw",
+    body: "Ganjaran masuk terus ke wallet anda selepas disahkan. Kumpul XP, naik level, dan withdraw ke bank bila-bila masa.",
+    icon: "💸",
   },
 ];
 
@@ -168,10 +168,10 @@ export default function Home() {
       {/* POPULAR PLATFORMS */}
       <section className="mx-auto max-w-6xl px-4 py-16">
         <div className="text-center">
-          <span className="pj-eyebrow">Popular</span>
-          <h2 className="mt-4 text-3xl font-bold sm:text-4xl">Kempen Media Sosial Popular</h2>
+          <span className="pj-eyebrow">Platform</span>
+          <h2 className="mt-4 text-3xl font-bold sm:text-4xl">Buat Tugasan di Platform Kegemaran</h2>
           <p className="mt-3 text-slate-600 dark:text-slate-300">
-            Pilih platform &amp; naikkan engagement anda hari ini.
+            Tugasan tersedia setiap hari — pilih platform yang anda sudah biasa guna.
           </p>
         </div>
         <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -195,17 +195,17 @@ export default function Home() {
       {/* 3 WAYS */}
       <section className="mx-auto max-w-6xl px-4 py-16">
         <div className="text-center">
-          <span className="pj-eyebrow">3 Cara Untuk Anda</span>
-          <h2 className="mt-4 text-3xl font-bold sm:text-4xl">Satu platform, tiga peluang</h2>
+          <span className="pj-eyebrow">Untuk Komuniti</span>
+          <h2 className="mt-4 text-3xl font-bold sm:text-4xl">Cara Komuniti Kami Menang</h2>
           <p className="mt-3 text-slate-600 dark:text-slate-300">
-            Beli servis, buat tugasan, atau jemput rakan — pilih cara anda.
+            Buat tugasan, naik level, dan jemput rakan — pendapatan makin bertambah.
           </p>
         </div>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {[
-            { tag: "Untuk Bisnes", icon: "📣", title: "Beli Kempen", body: "Naikkan follower, like & komen akaun anda dengan interaksi pengguna sebenar.", href: "/marketplace", cta: "Lihat Marketplace" },
-            { tag: "Ganjaran Terus", icon: "💸", title: "Buat Tugasan", body: "Selesaikan tugasan ringkas dan kumpul ganjaran terus ke wallet anda.", href: "/daftar", cta: "Daftar & Mula" },
-            { tag: "10% Komisyen", icon: "🤝", title: "Jadi Affiliate", body: "Jemput rakan menyertai PeningJob dan dapat komisyen setiap pembelian mereka.", href: "/daftar", cta: "Daftar Sekarang" },
+            { tag: "Ganjaran Terus", icon: "💸", title: "Buat Tugasan", body: "Selesaikan tugasan ringkas ikut masa lapang anda dan kumpul ganjaran tunai terus ke wallet.", href: "/daftar", cta: "Daftar & Mula" },
+            { tag: "Gamifikasi", icon: "🏆", title: "Naik Level & Leaderboard", body: "Setiap tugasan beri XP. Naik level, panjat leaderboard, dan tunjuk pencapaian anda.", href: "/leaderboard", cta: "Lihat Leaderboard" },
+            { tag: "10% Komisyen", icon: "🤝", title: "Jemput Rakan", body: "Kongsi link anda — dapat RM0.10 setiap rakan daftar + komisyen berterusan.", href: "/daftar", cta: "Daftar Sekarang" },
           ].map((c) => (
             <div key={c.title} className="pj-card pj-card-hover group relative flex flex-col overflow-hidden p-7">
               <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brand-400/10 blur-2xl transition group-hover:bg-brand-400/20" />
@@ -221,6 +221,34 @@ export default function Home() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* COMMUNITY STORIES */}
+      <section id="kisah" className="mx-auto max-w-6xl px-4 py-16">
+        <div className="text-center">
+          <span className="pj-eyebrow">Kisah Komuniti</span>
+          <h2 className="mt-4 text-3xl font-bold sm:text-4xl">Dibina untuk komuniti kami</h2>
+          <p className="mx-auto mt-3 max-w-lg text-slate-600 dark:text-slate-300">
+            Ribuan rakyat Malaysia guna PeningJob untuk jana pendapatan sampingan mengikut gaya hidup mereka.
+          </p>
+        </div>
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: "🎓", who: "Pelajar", body: "Tukar masa scroll antara kelas jadi duit poket. Tiada modal, buat ikut masa lapang." },
+            { icon: "🏠", who: "Suri Rumah", body: "Jana pendapatan dari rumah sambil uruskan keluarga — beberapa minit sehari sudah memadai." },
+            { icon: "💼", who: "Pekerja Part-time", body: "Income tambahan waktu malam & hujung minggu, terus masuk wallet dan withdraw ke bank." },
+            { icon: "🚀", who: "Peminat Sosial", body: "Kenali cara engagement organik berfungsi dari dalam — sambil dibayar untuk masa anda." },
+          ].map((s) => (
+            <div key={s.who} className="pj-card pj-card-hover p-6">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-50 text-2xl dark:bg-white/5">{s.icon}</div>
+              <h3 className="mt-4 font-bold">{s.who}</h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{s.body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Segmen di atas adalah contoh ilustrasi cara komuniti menggunakan PeningJob.
+        </p>
       </section>
 
       {/* CTA BANNER */}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
@@ -35,36 +35,12 @@ export function Logo({ size = 32 }: { size?: number }) {
   );
 }
 
-function ThemeToggle() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
-  }, []);
-  const toggle = () => {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    try {
-      localStorage.setItem("theme", next ? "dark" : "light");
-    } catch {}
-  };
-  return (
-    <button
-      onClick={toggle}
-      aria-label="Tukar mod"
-      className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white/70 text-base transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-    >
-      {dark ? "☀️" : "🌙"}
-    </button>
-  );
-}
-
 const NAV = [
   { href: "/", label: "Utama" },
-  { href: "/marketplace", label: "Marketplace" },
-  { href: "/untuk-bisnes", label: "Untuk Bisnes" },
+  { href: "/marketplace", label: "Kerja Terkini" },
+  { href: "/#cara", label: "Cara Berfungsi" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/blog", label: "Blog" },
+  { href: "/#kisah", label: "Kisah Komuniti" },
   { href: "/#faq", label: "Soalan Lazim" },
 ];
 
@@ -86,7 +62,6 @@ export function Nav() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
-          <ThemeToggle />
           <Link
             href="/log-masuk"
             className="hidden rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:block dark:text-slate-200 dark:hover:bg-white/10"
@@ -138,9 +113,9 @@ export function Footer() {
         <div>
           <h4 className="font-semibold">Platform</h4>
           <ul className="mt-3 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-            <li><Link href="/marketplace" className="hover:text-brand-500">Marketplace</Link></li>
-            <li><Link href="/untuk-bisnes" className="hover:text-brand-500">Untuk Bisnes</Link></li>
-            <li><Link href="/harga" className="hover:text-brand-500">Harga</Link></li>
+            <li><Link href="/marketplace" className="hover:text-brand-500">Kerja Terkini</Link></li>
+            <li><Link href="/leaderboard" className="hover:text-brand-500">Leaderboard</Link></li>
+            <li><Link href="/#kisah" className="hover:text-brand-500">Kisah Komuniti</Link></li>
             <li><Link href="/tentang" className="hover:text-brand-500">Tentang Kami</Link></li>
           </ul>
         </div>

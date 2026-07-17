@@ -29,10 +29,7 @@ export const metadata: Metadata = {
 const themeScript = `
 (function () {
   try {
-    var t = localStorage.getItem('theme');
-    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-    }
+    document.documentElement.classList.remove('dark');
     var ref = new URLSearchParams(window.location.search).get('ref');
     if (ref) localStorage.setItem('tk_ref', ref.toUpperCase());
   } catch (e) {}
