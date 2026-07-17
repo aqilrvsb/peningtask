@@ -8,8 +8,9 @@ import { createClient, hasSupabase } from "@/lib/supabase";
 type Campaign = { id: number; platform: string; quantity: number; delivered: number; escrow: number; fee: number; status: string; created_at: string };
 type Sub = { id: number; task_id: number; proof: string | null; proof_url: string | null; status: string; created_at: string; tasks: { action: string; reward: number; campaign_id: number } | null };
 
-const TABS = ["Ringkasan", "Cipta Kempen", "Semakan Bukti", "Kempen Saya", "Wallet", "Brand"] as const;
+const TABS = ["Ringkasan", "Cipta Kempen", "Semakan Bukti", "Pengeluaran", "Kempen Saya", "Wallet", "Brand"] as const;
 type Tab = (typeof TABS)[number];
+type WdReq = { id: number; user_name: string | null; whatsapp: string | null; ic_number: string | null; bank: string | null; amount: number; method: string | null; created_at: string };
 const PLATFORMS = ["Facebook", "Threads", "TikTok", "Instagram", "AI"];
 const FEE_PCT = 20;
 
@@ -24,6 +25,7 @@ export default function VendorPanel() {
   const [wallet, setWallet] = useState(0);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [subs, setSubs] = useState<Sub[]>([]);
+  const [wdReqs, setWdReqs] = useState<WdReq[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
   // brand settings
@@ -68,7 +70,7 @@ export default function VendorPanel() {
     setWallet(Number(prof.wallet_balance));
     setBizName(prof.business_name ?? "");
     setLogoUrl(prof.avatar_url ?? null);
-    const [c, s] = await Promise.all([
+    const [c, s, wr] = await Promise.all([
       supabase.from("campaigns").select("id,platform,quantity,delivered,escrow,fee,status,created_at").eq("owner", auth.user.id).order("created_at", { ascending: false }),
       supabase
         .from("submissions")
@@ -76,10 +78,23 @@ export default function VendorPanel() {
         .eq("status", "pending")
         .eq("tasks.campaign.owner", auth.user.id)
         .order("created_at", { ascending: true }),
+      supabase.rpc("vendor_withdrawal_requests"),
     ]);
     setCampaigns((c.data as Campaign[]) ?? []);
     setSubs((s.data as unknown as Sub[]) ?? []);
+    setWdReqs((wr.data as WdReq[]) ?? []);
   }, [supabase]);
+
+  async function processWd(id: number, approve: boolean) {
+    if (!supabase) return;
+    if (!approve && !confirm("Tolak permohonan pengeluaran ini?")) return;
+    const { error } = await supabase.rpc("process_withdrawal", { p_id: id, p_approve: approve });
+    if (error) flash("❌ " + error.message);
+    else {
+      flash(approve ? "💸 Dibayar & baki client dipotong" : "Permohonan ditolak");
+      load();
+    }
+  }
 
   useEffect(() => {
     load();
@@ -236,6 +251,9 @@ export default function VendorPanel() {
               {t === "Semakan Bukti" && subs.length > 0 && (
                 <span className="ml-1.5 rounded-full bg-brand-500 px-1.5 text-xs text-white">{subs.length}</span>
               )}
+              {t === "Pengeluaran" && wdReqs.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-white">{wdReqs.length}</span>
+              )}
             </button>
           ))}
         </div>
@@ -339,6 +357,28 @@ export default function VendorPanel() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {tab === "Pengeluaran" && (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">Permohonan pengeluaran daripada client. Bila anda tanda <b>Bayar</b>, baki client dipotong &amp; ditandakan Success.</p>
+              {wdReqs.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 dark:border-slate-700">Tiada permohonan pengeluaran ✅</p>}
+              {wdReqs.map((w) => (
+                <div key={w.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold">{w.user_name || "—"} · <span className="text-brand-500">{rm(w.amount)}</span></p>
+                      <p className="mt-0.5 text-sm text-slate-500">🏦 {w.method || w.bank}</p>
+                      <p className="text-xs text-slate-400">IC: {w.ic_number || "—"} · Tel: {w.whatsapp || "—"}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => processWd(w.id, true)} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Bayar (Success)</button>
+                      <button onClick={() => processWd(w.id, false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Tolak</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

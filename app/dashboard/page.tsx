@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [myJobs, setMyJobs] = useState<MyJob[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
   const [wds, setWds] = useState<Wd[]>([]);
+  const [wsum, setWsum] = useState<{ total_commission: number; total_withdrawn: number; pending_withdrawal: number; balance: number } | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [showNotif, setShowNotif] = useState(false);
 
@@ -76,14 +77,16 @@ export default function Dashboard() {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { window.location.href = "/log-masuk"; return; }
     const uid = auth.user.id;
-    const [p, mj, jb, w, wd, nf] = await Promise.all([
+    const [p, mj, jb, w, wd, nf, ws] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", uid).single(),
       supabase.rpc("client_my_jobs"),
       supabase.rpc("open_tasks"),
       supabase.from("wallet_transactions").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(30),
       supabase.from("withdrawals").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
       supabase.from("notifications").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(15),
+      supabase.rpc("client_wallet_summary"),
     ]);
+    setWsum((Array.isArray(ws.data) ? ws.data[0] : ws.data) ?? null);
     if (p.data) {
       const pr = p.data as Profile;
       setProfile(pr);
@@ -143,11 +146,6 @@ export default function Dashboard() {
     setActiveTask(null); load(); setSection("proses");
   }
 
-  async function topup() {
-    if (!supabase) return; const v = prompt("Jumlah topup (RM):", "20"); if (!v) return;
-    const { error } = await supabase.rpc("topup_wallet", { p_amount: Number(v) });
-    flash(error ? "❌ " + error.message : "✅ Wallet ditambah " + rm(Number(v))); if (!error) load();
-  }
   async function withdraw() {
     if (!supabase || !profile) return;
     if (!profile.full_name || !profile.ic_number || !profile.bank_name || !profile.bank_account) {
@@ -315,14 +313,16 @@ export default function Dashboard() {
           {section === "wallet" && (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-4">
-                <div className="pj-card p-6">
-                  <p className="text-sm text-slate-500">Baki tersedia (komisyen &amp; ganjaran)</p>
-                  <p className="mt-1 text-3xl font-extrabold text-gradient">{rm(profile?.wallet_balance)}</p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button onClick={withdraw} className="pj-btn-primary px-5 py-2.5">Withdraw</button>
-                    <button onClick={topup} className="pj-btn-ghost px-5 py-2.5">Topup</button>
-                  </div>
-                  {(!profile?.bank_account || !profile?.ic_number) && <p className="mt-3 text-xs text-amber-600">⚠️ Lengkapkan maklumat bank &amp; IC di Tetapan sebelum withdraw.</p>}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="pj-card p-4"><p className="text-xs text-slate-500">💰 Total Komisyen</p><p className="mt-1 text-xl font-extrabold text-gradient">{rm(wsum?.total_commission)}</p></div>
+                  <div className="pj-card p-4"><p className="text-xs text-slate-500">💸 Total Withdrawal</p><p className="mt-1 text-xl font-extrabold">{rm(wsum?.total_withdrawn)}</p></div>
+                </div>
+                <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
+                  <p className="text-sm text-white/80">Baki Semasa (Komisyen − Withdrawal)</p>
+                  <p className="mt-1 text-3xl font-extrabold">{rm(wsum?.balance ?? profile?.wallet_balance)}</p>
+                  {(wsum?.pending_withdrawal ?? 0) > 0 && <p className="mt-1 text-xs text-white/80">Tertunda: {rm(wsum?.pending_withdrawal)} (menunggu vendor lulus)</p>}
+                  <button onClick={withdraw} className="mt-4 rounded-xl bg-white px-5 py-2.5 font-semibold text-brand-600 hover:scale-[1.02]">Mohon Withdraw</button>
+                  {(!profile?.bank_account || !profile?.ic_number) && <p className="mt-3 text-xs text-white/90">⚠️ Lengkapkan Bank &amp; IC di Tetapan sebelum withdraw.</p>}
                 </div>
                 <div className="pj-card overflow-hidden p-0">
                   <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-white/10">Sejarah Pengeluaran</p>
