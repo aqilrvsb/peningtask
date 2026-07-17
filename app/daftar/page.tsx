@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/site";
 import { createClient, hasSupabase } from "@/lib/supabase";
+import { normalizePhone } from "@/lib/phone";
 
 type Step = "form" | "otp";
 
@@ -96,15 +97,15 @@ export default function RegisterPage() {
       try {
         ref = localStorage.getItem("tk_ref") ?? "";
       } catch {}
-      // phone is normalized server-side; send the same normalized value
-      const normalized = phone.replace(/[^0-9]/g, "").replace(/^0/, "6");
+      // Use the SAME normalizer as the server so the phone here exactly
+      // matches the verified phone (else the signup trigger rejects it).
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: name,
-            whatsapp: normalized.startsWith("60") ? normalized : "60" + normalized,
+            whatsapp: normalizePhone(phone),
             ref,
             account_type: "user",
           },
