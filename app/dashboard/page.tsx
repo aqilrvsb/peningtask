@@ -4,17 +4,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/site";
 import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
+import { compressImage } from "@/lib/compress";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Profile = {
   full_name: string | null; whatsapp: string | null; wallet_balance: number; ref_code: string | null;
   role: string; xp: number; level: number; total_earned: number; tasks_done: number;
   bank_name: string | null; bank_account: string | null; ic_number: string | null;
+  tng_phone: string | null; tng_qr_url: string | null;
   url_facebook: string | null; url_threads: string | null; url_instagram: string | null;
   url_youtube: string | null; url_tiktok: string | null;
 };
-type Job = { id: number; platform: string; action: string; reward: number; target_url: string | null; vendor_name: string | null; vendor_logo: string | null };
-type MyJob = { submission_id: number; task_id: number; platform: string; action: string; reward: number; status: string; proof: string | null; proof_url: string | null; reject_reason: string | null; target_url: string | null; vendor_name: string | null; created_at: string };
+type Job = {
+  id: number; platform: string; title: string; description: string | null; reward: number;
+  quota: number; taken: number; duration_min: number | null; evidence_type: string;
+  claim_mode: string; per_user_quota: number; deadline: string | null; target_url: string | null;
+  example_urls: string[]; vendor_name: string | null; vendor_logo: string | null; created_at: string;
+};
+type MyJob = { submission_id: number; task_id: number; platform: string; action: string; reward: number; status: string; proof: string | null; proof_url: string | null; reject_reason: string | null; target_url: string | null; evidence_type: string; vendor_name: string | null; created_at: string };
 type Txn = { id: number; amount: number; kind: string; note: string | null; created_at: string };
 type Wd = { id: number; amount: number; method: string | null; status: string; created_at: string };
 type Notif = { id: number; title: string; body: string | null; read: boolean; created_at: string };
@@ -27,12 +34,13 @@ const NAV = [
   { key: "success", icon: "✅", label: "Job Success" },
   { key: "rejected", icon: "❌", label: "Job Rejected" },
   { key: "wallet", icon: "👛", label: "Wallet" },
+  { key: "withdraw", icon: "🏧", label: "Withdraw" },
   { key: "earners", icon: "🏆", label: "Top Earners" },
   { key: "support", icon: "🎫", label: "Support" },
   { key: "settings", icon: "⚙️", label: "Settings" },
 ];
-const PLATFORMS = ["All", "Facebook", "Threads", "Instagram", "YouTube", "TikTok"];
-const ICON_KEY: Record<string, string> = { Facebook: "facebook", Threads: "threads", Instagram: "instagram", YouTube: "youtube", TikTok: "tiktok" };
+const PLATFORMS = ["All", "TikTok", "Instagram", "Facebook", "YouTube", "Threads", "Shopee"];
+const ICON_KEY: Record<string, string> = { Facebook: "facebook", Threads: "threads", Instagram: "instagram", YouTube: "youtube", TikTok: "tiktok", Shopee: "shopee" };
 const URL_FIELD: Record<string, keyof Profile> = { Facebook: "url_facebook", Threads: "url_threads", Instagram: "url_instagram", YouTube: "url_youtube", TikTok: "url_tiktok" };
 const STATUS_OF: Record<string, string> = { pending: "accepted", process: "pending", success: "approved", rejected: "rejected" };
 
@@ -79,15 +87,20 @@ export default function Dashboard() {
     })();
   }, [section, earnPeriod, supabase]);
 
+  // job detail view (marketplace)
+  const [jobDetail, setJobDetail] = useState<Job | null>(null);
+
   // submit-proof modal (for an accepted/pending job)
   const [submitTarget, setSubmitTarget] = useState<MyJob | null>(null);
   const [descText, setDescText] = useState("");
-  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofFiles, setProofFiles] = useState<File[]>([]);
+  const [videoUrl, setVideoUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // settings
   const [f, setF] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [qrFile, setQrFile] = useState<File | null>(null);
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
 
@@ -110,7 +123,7 @@ export default function Dashboard() {
       setProfile(pr);
       setF({
         full_name: pr.full_name ?? "", whatsapp: pr.whatsapp ?? "", ic_number: pr.ic_number ?? "",
-        bank_name: pr.bank_name ?? "", bank_account: pr.bank_account ?? "",
+        bank_name: pr.bank_name ?? "", bank_account: pr.bank_account ?? "", tng_phone: pr.tng_phone ?? "",
         url_facebook: pr.url_facebook ?? "", url_threads: pr.url_threads ?? "", url_instagram: pr.url_instagram ?? "",
         url_youtube: pr.url_youtube ?? "", url_tiktok: pr.url_tiktok ?? "",
       });
@@ -140,41 +153,42 @@ export default function Dashboard() {
       setSection("settings");
       return;
     }
-    const { error } = await supabase.rpc("accept_job", { p_task_id: job.id });
+    const { error } = await supabase.rpc("accept_job", { p_campaign_id: job.id });
     if (error) return flash("❌ " + error.message);
     flash("✅ Job accepted! Complete it, then submit your proof.");
+    setJobDetail(null);
     await load();
     setSection("pending");
   }
 
   async function submitJobProof() {
     if (!supabase || !submitTarget) return;
-    if (!proofFile) return flash("⚠️ Upload a screenshot proof");
+    const isVideo = submitTarget.evidence_type === "video";
     if (!descText.trim()) return flash("⚠️ Add a description");
+    const urls: string[] = [];
     setSubmitting(true);
-    const { data: auth } = await supabase.auth.getUser();
-    const ext = proofFile.name.split(".").pop() || "png";
-    const path = `${auth.user!.id}/${submitTarget.task_id}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("proofs").upload(path, proofFile);
-    if (upErr) { setSubmitting(false); return flash("❌ Upload failed: " + upErr.message); }
-    const url = supabase.storage.from("proofs").getPublicUrl(path).data.publicUrl;
-    const { error } = await supabase.rpc("submit_job", { p_sub_id: submitTarget.submission_id, p_desc: descText, p_proof_url: url });
+    if (isVideo) {
+      const v = videoUrl.trim();
+      if (!/^https?:\/\/.+/.test(v)) { setSubmitting(false); return flash("⚠️ Paste a valid video URL (https://…)"); }
+      urls.push(v);
+    } else {
+      if (proofFiles.length === 0) { setSubmitting(false); return flash("⚠️ Upload at least one screenshot"); }
+      const { data: auth } = await supabase.auth.getUser();
+      for (const f of proofFiles) {
+        const compact = await compressImage(f);
+        const ext = compact.name.split(".").pop() || "jpg";
+        const path = `${auth.user!.id}/${submitTarget.task_id}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("proofs").upload(path, compact);
+        if (upErr) { setSubmitting(false); return flash("❌ Upload failed: " + upErr.message); }
+        urls.push(supabase.storage.from("proofs").getPublicUrl(path).data.publicUrl);
+      }
+    }
+    const { error } = await supabase.rpc("submit_job", { p_sub_id: submitTarget.submission_id, p_desc: descText, p_proof_urls: urls });
     setSubmitting(false);
     if (error) return flash("❌ " + error.message);
     flash("✅ Submitted! Waiting for vendor review.");
-    setSubmitTarget(null); setDescText(""); setProofFile(null);
+    setSubmitTarget(null); setDescText(""); setProofFiles([]); setVideoUrl("");
     await load(); setSection("process");
-  }
-
-  async function withdraw() {
-    if (!supabase || !profile) return;
-    if (!profile.full_name || !profile.ic_number || !profile.bank_name || !profile.bank_account) {
-      flash("⚠️ Complete Full Name, IC, Bank & Account in Settings first."); setSection("settings"); return;
-    }
-    const v = prompt("Withdraw amount (RM):"); if (!v) return;
-    const method = `${profile.bank_name} ${profile.bank_account}`;
-    const { error } = await supabase.rpc("request_withdrawal", { p_amount: Number(v), p_method: method });
-    flash(error ? "❌ " + error.message : "✅ Request sent. Processed within 24h."); if (!error) load();
   }
 
   async function saveSettings() {
@@ -182,6 +196,7 @@ export default function Dashboard() {
     const { data: auth } = await supabase.auth.getUser();
     const { error } = await supabase.from("profiles").update({
       full_name: f.full_name, whatsapp: f.whatsapp, ic_number: f.ic_number, bank_name: f.bank_name, bank_account: f.bank_account,
+      tng_phone: f.tng_phone,
       url_facebook: f.url_facebook, url_threads: f.url_threads, url_instagram: f.url_instagram, url_youtube: f.url_youtube, url_tiktok: f.url_tiktok,
     }).eq("id", auth.user!.id);
     setSaving(false);
@@ -254,12 +269,13 @@ export default function Dashboard() {
                     <span className="hidden text-xs font-medium text-slate-500 sm:block">{j.platform}</span>
                   </div>
                 </td>
-                <td className="max-w-[220px] truncate px-5 py-3.5 font-semibold">{j.action}</td>
+                <td className="max-w-[220px] truncate px-5 py-3.5 font-semibold">{j.title}</td>
                 <td className="px-5 py-3.5 text-slate-500">{j.vendor_name}</td>
                 <td className="px-5 py-3.5 font-extrabold text-gradient">{rm(j.reward)}</td>
-                <td className="px-5 py-3.5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:bg-emerald-500/10">Active</span></td>
+                <td className="px-5 py-3.5 text-slate-500">{j.taken}/{j.quota}</td>
+                <td className="px-5 py-3.5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:bg-emerald-500/10">Available</span></td>
                 <td className="px-5 py-3.5 text-right">
-                  <button onClick={() => onApply(j)} className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-sm font-bold transition hover:border-transparent hover:bg-brand-gradient hover:text-white hover:shadow-glow-sm dark:border-white/10" title="Apply">+</button>
+                  <button onClick={() => onApply(j)} className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-sm font-bold transition hover:border-transparent hover:bg-brand-gradient hover:text-white hover:shadow-glow-sm dark:border-white/10" title="Take job">+</button>
                 </td>
               </tr>
             ))}
@@ -291,7 +307,7 @@ export default function Dashboard() {
                   <div className="flex flex-col items-end gap-2">
                     <p className="font-bold text-gradient">{rm(j.reward)}</p>
                     {showSubmit ? (
-                      <button onClick={() => { setSubmitTarget(j); setDescText(""); setProofFile(null); }} className="pj-btn-primary px-4 py-2">Submit Proof</button>
+                      <button onClick={() => { setSubmitTarget(j); setDescText(""); setProofFiles([]); setVideoUrl(""); }} className="pj-btn-primary px-4 py-2">Submit Proof</button>
                     ) : statusBadge(j.status)}
                   </div>
                 </div>
@@ -367,7 +383,7 @@ export default function Dashboard() {
                   <div className="mt-5 flex gap-2">
                     <button onClick={() => setSection("marketplace")} className="grid h-11 w-11 place-items-center rounded-xl bg-white/20 text-lg backdrop-blur transition hover:bg-white/30" title="Browse jobs">🛒</button>
                     <button onClick={() => setSection("wallet")} className="grid h-11 w-11 place-items-center rounded-xl bg-white/20 text-lg backdrop-blur transition hover:bg-white/30" title="Wallet">👛</button>
-                    <button onClick={withdraw} className="ml-auto rounded-xl bg-white px-4 py-2 text-sm font-bold text-brand-600 transition hover:scale-[1.03]">Withdraw</button>
+                    <button onClick={() => setSection("withdraw")} className="ml-auto rounded-xl bg-white px-4 py-2 text-sm font-bold text-brand-600 transition hover:scale-[1.03]">Withdraw</button>
                   </div>
                   <div className="mt-4">
                     <div className="flex justify-between text-[11px] text-white/75"><span>Level {profile?.level ?? 1} ⭐</span><span>{xpInLevel}/100 XP</span></div>
@@ -427,12 +443,100 @@ export default function Dashboard() {
             </div>
           )}
 
-          {section === "marketplace" && (
+          {section === "marketplace" && !jobDetail && (
             <div>
               <div className="mb-5 flex flex-wrap gap-2">
-                {PLATFORMS.map((p) => <button key={p} onClick={() => setMpPlatform(p)} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>{p}</button>)}
+                {PLATFORMS.map((p) => (
+                  <button key={p} onClick={() => setMpPlatform(p)} className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>
+                    {ICON_KEY[p] && <PlatformIcon name={ICON_KEY[p]} size={20} />}{p}
+                  </button>
+                ))}
               </div>
-              <JobTable rows={shownJobs} onApply={acceptJob} />
+              {shownJobs.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">No {mpPlatform !== "All" ? mpPlatform : ""} jobs right now. Check back soon 🙌</p> : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {shownJobs.map((j) => (
+                    <div key={j.id} className="pj-card pj-card-hover flex flex-col p-5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                          {ICON_KEY[j.platform] && <PlatformIcon name={ICON_KEY[j.platform]} size={16} />}{j.platform}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10">Available</span>
+                      </div>
+                      <p className="mt-3 text-[11px] font-semibold text-slate-400">#{j.id}</p>
+                      <h3 className="mt-0.5 line-clamp-2 font-bold leading-snug">{j.title}</h3>
+                      {j.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{j.description}</p>}
+                      <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300">
+                        <span>💰 <b className="text-gradient">{rm(j.reward)}</b></span>
+                        <span>⏱️ {j.duration_min ? `${j.duration_min} min` : "—"}</span>
+                        <span>👥 Slot: {j.taken}/{j.quota}</span>
+                        <span>{j.evidence_type === "video" ? "🎬 Video" : "📷 Image"}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-400">🕐 {new Date(j.created_at).toLocaleString("en-MY", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "numeric", minute: "2-digit" })}</p>
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        <button onClick={() => setJobDetail(j)} className="pj-btn-ghost py-2.5">View Details</button>
+                        <button onClick={() => acceptJob(j)} className="pj-btn-primary py-2.5">Take Job</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {section === "marketplace" && jobDetail && (
+            <div>
+              <button onClick={() => setJobDetail(null)} className="mb-4 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">← Back</button>
+              <div className="grid gap-5 lg:grid-cols-3">
+                <div className="space-y-5 lg:col-span-2">
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                        {ICON_KEY[jobDetail.platform] && <PlatformIcon name={ICON_KEY[jobDetail.platform]} size={16} />}{jobDetail.platform}
+                      </span>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10">Available</span>
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-slate-400">#{jobDetail.id} · by {jobDetail.vendor_name}</p>
+                    <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">{jobDetail.title}</h1>
+                    {jobDetail.target_url && (
+                      <a href={jobDetail.target_url} target="_blank" className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-50 px-4 py-2 text-sm font-bold text-brand-600 transition hover:bg-brand-100 dark:bg-brand-500/10">
+                        ↗ Open Job Link
+                      </a>
+                    )}
+                  </div>
+                  <div className="pj-card p-6">
+                    <h2 className="font-bold">Job Instructions</h2>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">{jobDetail.description || "Follow the job link and complete the action, then submit your proof."}</p>
+                  </div>
+                  {jobDetail.example_urls?.length > 0 && (
+                    <div className="pj-card p-6">
+                      <h2 className="font-bold">📷 Accepted Proof Examples</h2>
+                      <div className="mt-3 grid grid-cols-3 gap-3">
+                        {jobDetail.example_urls.map((u, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <a key={i} href={u} target="_blank"><img src={u} alt={`Example ${i + 1}`} className="h-32 w-full rounded-xl border border-slate-200 object-cover dark:border-white/10" /></a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <div className="pj-card p-5">
+                    {[
+                      ["💰 Reward", <b key="r" className="text-gradient">{rm(jobDetail.reward)}</b>],
+                      ["👥 Participants", `${jobDetail.taken} / ${jobDetail.quota}`],
+                      ["⏱️ Est. Time", jobDetail.duration_min ? `${jobDetail.duration_min} min` : "—"],
+                      ["📄 Proof Type", jobDetail.evidence_type === "video" ? "Video" : "Image"],
+                      ["🔁 Claim", jobDetail.claim_mode === "multi" ? `Up to ${jobDetail.per_user_quota}× per user` : "One time per user"],
+                      ...(jobDetail.deadline ? [["📅 Deadline", new Date(jobDetail.deadline).toLocaleString("en-MY")]] as [string, string][] : []),
+                    ].map(([k, v], i) => (
+                      <div key={i} className="flex items-center justify-between border-b border-slate-100 py-2.5 text-sm last:border-0 dark:border-white/5">
+                        <span className="text-slate-500">{k}</span><span className="font-semibold">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => acceptJob(jobDetail)} className="pj-btn-primary w-full py-3.5 text-base">Take This Job</button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -442,27 +546,128 @@ export default function Dashboard() {
           {section === "rejected" && <JobList status="rejected" withDate />}
 
           {section === "wallet" && (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="pj-card p-4"><p className="text-xs text-slate-500">💰 Total Commission</p><p className="mt-1 text-xl font-extrabold text-gradient">{rm(wsum?.total_commission)}</p></div>
-                  <div className="pj-card p-4"><p className="text-xs text-slate-500">💸 Total Withdrawal</p><p className="mt-1 text-xl font-extrabold">{rm(wsum?.total_withdrawn)}</p></div>
-                </div>
-                <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
-                  <p className="text-sm text-white/80">Current Balance (Commission − Withdrawal)</p>
-                  <p className="mt-1 text-3xl font-extrabold">{rm(wsum?.balance ?? profile?.wallet_balance)}</p>
-                  {(wsum?.pending_withdrawal ?? 0) > 0 && <p className="mt-1 text-xs text-white/80">Pending: {rm(wsum?.pending_withdrawal)} (awaiting admin approval)</p>}
-                  <button onClick={withdraw} className="mt-4 rounded-xl bg-white px-5 py-2.5 font-semibold text-brand-600 hover:scale-[1.02]">Request Withdraw</button>
-                  {(!profile?.bank_account || !profile?.ic_number) && <p className="mt-3 text-xs text-white/90">⚠️ Complete Bank &amp; IC in Settings before withdrawing.</p>}
-                </div>
-                <div className="pj-card overflow-hidden p-0">
-                  <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-white/10">Withdrawal History</p>
-                  {wds.length === 0 ? <p className="p-5 text-center text-sm text-slate-400">No withdrawals yet.</p> : <ul className="divide-y divide-slate-100 dark:divide-white/5">{wds.map((w) => <li key={w.id} className="flex items-center justify-between px-4 py-3 text-sm"><div><p className="font-semibold">{rm(w.amount)}</p><p className="text-xs text-slate-400">{w.method}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${w.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : w.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{w.status === "paid" ? "Paid" : w.status === "rejected" ? "Rejected" : "Pending"}</span></li>)}</ul>}
-                </div>
+            <div className="space-y-5">
+              <p className="text-sm text-slate-500">Summary of your balance and wallet transactions.</p>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  { l: "Reward Balance", v: rm(wsum?.balance ?? profile?.wallet_balance), d: "Available to withdraw", hot: true },
+                  { l: "Pending Review", v: rm(myJobs.filter((j) => j.status === "pending").reduce((a, j) => a + Number(j.reward), 0)), d: "Jobs awaiting vendor review" },
+                  { l: "Total Earned", v: rm(wsum?.total_commission), d: "All approved earnings" },
+                  { l: "Total Withdrawn", v: rm(wsum?.total_withdrawn), d: "Paid out to your bank" },
+                ].map((s) => (
+                  <div key={s.l} className={`pj-card p-5 ${s.hot ? "ring-1 ring-brand-300/60" : ""}`}>
+                    <p className="text-xs font-semibold text-slate-500">{s.l}</p>
+                    <p className={`mt-1.5 text-2xl font-extrabold ${s.hot ? "text-gradient" : ""}`}>{s.v}</p>
+                    <p className="mt-1 text-xs text-slate-400">{s.d}</p>
+                  </div>
+                ))}
               </div>
+              {(wsum?.pending_withdrawal ?? 0) > 0 && (
+                <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-4 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                  ⏳ {rm(wsum?.pending_withdrawal)} withdrawal pending admin approval.
+                </div>
+              )}
               <div className="pj-card overflow-hidden p-0">
-                <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-white/10">Recent Transactions</p>
-                {txns.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No transactions.</p> : <ul className="divide-y divide-slate-100 dark:divide-white/5">{txns.map((x) => <li key={x.id} className="flex items-center justify-between px-4 py-3 text-sm"><span className="text-slate-600 dark:text-slate-300">{x.note ?? x.kind}</span><span className={`font-semibold ${x.amount >= 0 ? "text-brand-600" : "text-rose-500"}`}>{x.amount >= 0 ? "+" : ""}{rm(x.amount)}</span></li>)}</ul>}
+                <p className="border-b border-slate-100 px-5 py-3.5 font-bold dark:border-white/10">Transaction History</p>
+                {txns.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">No transactions yet.</p> : (
+                  <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                    {txns.map((x) => (
+                      <li key={x.id} className="flex items-center justify-between px-5 py-3.5 text-sm">
+                        <div>
+                          <p className="font-medium text-slate-700 dark:text-slate-200">{x.note ?? x.kind}</p>
+                          <p className="text-xs text-slate-400">{new Date(x.created_at).toLocaleString("en-MY")}</p>
+                        </div>
+                        <span className={`font-bold ${x.amount >= 0 ? "text-brand-600" : "text-rose-500"}`}>{x.amount >= 0 ? "+" : ""}{rm(x.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          {section === "withdraw" && (
+            <div className="mx-auto max-w-2xl space-y-5">
+              <p className="text-sm text-slate-500">Request a payout from your wallet (Reward Balance: <b className="text-brand-600">{rm(wsum?.balance ?? profile?.wallet_balance)}</b>)</p>
+
+              <div className="rounded-2xl border border-blue-200/70 bg-blue-50/70 p-5 text-sm text-blue-900 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+                <p className="font-bold">ℹ️ Withdrawal Policy</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  <li>Minimum withdrawal: <b>RM 1.00</b></li>
+                  <li>Payment via <b>Touch &#39;n Go eWallet</b> only</li>
+                  <li>Upload your TNG QR image — we scan it to pay you</li>
+                  <li>Processing takes <b>1–3 working days</b></li>
+                  <li>Only approved job earnings &amp; commissions can be withdrawn</li>
+                </ul>
+              </div>
+
+              <div className="pj-card p-6">
+                <h2 className="font-bold">Withdrawal Form</h2>
+                <p className="mt-4 text-sm font-medium">Withdrawal Amount</p>
+                <div className="mt-1 rounded-2xl bg-slate-50 p-6 text-center dark:bg-white/5">
+                  <p className="text-3xl font-extrabold text-gradient">{rm(wsum?.balance ?? profile?.wallet_balance)}</p>
+                  <p className="mt-1 text-xs text-slate-400">Your entire Reward Balance will be withdrawn</p>
+                </div>
+                {Number(wsum?.balance ?? 0) < 1 && <p className="mt-2 text-sm text-rose-500">A minimum balance of RM 1.00 is required to withdraw.</p>}
+
+                <div className="mt-5 space-y-3">
+                  <p className="text-sm font-bold">Touch &#39;n Go Details</p>
+                  {inp("full_name", "Full Name (as per IC)")}
+                  {inp("ic_number", "IC Number", "e.g. 900101-01-1234")}
+                  {inp("tng_phone", "TNG Phone Number", "e.g. 0123456789")}
+                  <div>
+                    <label className="block text-sm font-medium">TNG QR Image</label>
+                    <p className="text-xs text-slate-400">Upload a screenshot of your TNG eWallet QR code</p>
+                    <label className="mt-1 block cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 transition hover:border-brand-400 dark:border-white/10">
+                      {qrFile ? <span className="font-semibold text-brand-600">✓ {qrFile.name} (auto-compressed)</span>
+                        : profile?.tng_qr_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={profile.tng_qr_url} alt="TNG QR" className="mx-auto max-h-40 rounded-xl" />
+                        ) : <>🖼️ Click to upload your TNG QR<br /><span className="text-xs">PNG, JPG</span></>}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => setQrFile(e.target.files?.[0] ?? null)} />
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    if (!supabase) return;
+                    const bal = Number(wsum?.balance ?? profile?.wallet_balance ?? 0);
+                    if (bal < 1) return flash("⚠️ Minimum RM 1.00 required to withdraw.");
+                    if (!f.full_name || !f.ic_number || !f.tng_phone) return flash("⚠️ Complete Full Name, IC & TNG phone first.");
+                    if (qrFile) {
+                      const compact = await compressImage(qrFile);
+                      const { data: auth } = await supabase.auth.getUser();
+                      const path = `${auth.user!.id}/tng-qr.jpg`;
+                      const { error: upErr } = await supabase.storage.from("qr").upload(path, compact, { upsert: true });
+                      if (upErr) return flash("❌ QR upload failed: " + upErr.message);
+                      const url = supabase.storage.from("qr").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
+                      await supabase.from("profiles").update({ tng_qr_url: url }).eq("id", auth.user!.id);
+                    }
+                    await saveSettings();
+                    const { error } = await supabase.rpc("request_withdrawal", { p_amount: bal, p_method: `TNG ${f.tng_phone}` });
+                    flash(error ? "❌ " + error.message : "✅ Request submitted. Payment via TNG within 1–3 working days.");
+                    if (!error) { setQrFile(null); load(); }
+                  }}
+                  disabled={Number(wsum?.balance ?? 0) < 1}
+                  className="pj-btn-primary mt-5 w-full py-3.5 disabled:opacity-50"
+                >
+                  Submit Request
+                </button>
+              </div>
+
+              <div className="pj-card overflow-hidden p-0">
+                <p className="border-b border-slate-100 px-5 py-3.5 font-bold dark:border-white/10">Withdrawal History</p>
+                {wds.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">No withdrawal history.</p> : (
+                  <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                    {wds.map((w) => (
+                      <li key={w.id} className="flex items-center justify-between px-5 py-3.5 text-sm">
+                        <div><p className="font-semibold">{rm(w.amount)}</p><p className="text-xs text-slate-400">{w.method} · {new Date(w.created_at).toLocaleString("en-MY")}</p></div>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${w.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : w.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{w.status === "paid" ? "Paid" : w.status === "rejected" ? "Rejected" : "Pending"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           )}
@@ -519,15 +724,12 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="pj-card h-fit p-6">
-                <h2 className="text-lg font-semibold">🏦 Bank Details (for withdrawal)</h2>
+                <h2 className="text-lg font-semibold">👤 Account</h2>
                 <div className="mt-4 space-y-3">
-                  {inp("full_name", "Full Name (as per IC)")}
-                  {inp("ic_number", "IC Number", "e.g. 900101-01-1234")}
+                  {inp("full_name", "Full Name")}
                   {inp("whatsapp", "Phone Number")}
-                  {inp("bank_name", "Bank Name", "e.g. Maybank")}
-                  {inp("bank_account", "Account Number")}
                 </div>
-                <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500 dark:bg-white/5">🔒 Your IC &amp; bank details are stored securely — visible only to you and admin.</div>
+                <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500 dark:bg-white/5">🏦 Bank details for payout are managed on the <b>Withdraw</b> page.</div>
               </div>
               <div className="lg:col-span-2">
                 <button onClick={saveSettings} disabled={saving} className="pj-btn-primary w-full py-3.5 lg:w-auto lg:px-10">{saving ? "Saving…" : "Save All Settings"}</button>
@@ -551,11 +753,19 @@ export default function Dashboard() {
               <button onClick={() => setSubmitTarget(null)} className="text-slate-400">✕</button>
             </div>
             {submitTarget.target_url && <a href={submitTarget.target_url} target="_blank" className="mt-4 block truncate rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-center text-sm font-semibold text-brand-600 hover:bg-brand-100 dark:border-brand-500/30 dark:bg-brand-500/10">🔗 Open Target Link</a>}
-            <div className="mt-4">
-              <label className="block text-sm font-medium">Screenshot proof *</label>
-              <input type="file" accept="image/*" onChange={(e) => setProofFile(e.target.files?.[0] ?? null)} className="mt-1 w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm dark:border-white/10" />
-              {proofFile && <p className="mt-1 text-xs text-brand-500">✓ {proofFile.name}</p>}
-            </div>
+            {submitTarget.evidence_type === "video" ? (
+              <div className="mt-4">
+                <label className="block text-sm font-medium">Video URL *</label>
+                <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://tiktok.com/@you/video/…" className="mt-1 w-full rounded-xl px-4 py-2.5 text-sm" />
+                <p className="mt-1 text-xs text-slate-400">Paste the link to your posted video as proof.</p>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <label className="block text-sm font-medium">Screenshot proof(s) *</label>
+                <input type="file" accept="image/*" multiple onChange={(e) => setProofFiles(Array.from(e.target.files ?? []))} className="mt-1 w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm dark:border-white/10" />
+                {proofFiles.length > 0 && <p className="mt-1 text-xs text-brand-500">✓ {proofFiles.length} image(s) selected (auto-compressed)</p>}
+              </div>
+            )}
             <div className="mt-4">
               <label className="block text-sm font-medium">Description *</label>
               <textarea value={descText} onChange={(e) => setDescText(e.target.value)} rows={3} placeholder="Describe what you did (e.g. followed the account with @myusername)" className="mt-1 w-full rounded-xl px-4 py-2.5 text-sm" />

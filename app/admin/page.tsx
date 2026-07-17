@@ -61,6 +61,35 @@ export default function Admin() {
   const [busy, setBusy] = useState(false);
   const toggleProof = (p: string) => setProofTypes((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
 
+  // create user modal
+  const [creatingUser, setCreatingUser] = useState<null | "user" | "vendor">(null);
+  const [nuName, setNuName] = useState("");
+  const [nuEmail, setNuEmail] = useState("");
+  const [nuPhone, setNuPhone] = useState("");
+  const [nuPass, setNuPass] = useState("");
+  const [nuBusy, setNuBusy] = useState(false);
+
+  async function createUser() {
+    if (!supabase || !creatingUser) return;
+    setNuBusy(true);
+    const { data: sess } = await supabase.auth.getSession();
+    const res = await fetch("/api/admin/create-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token ?? ""}` },
+      body: JSON.stringify({ name: nuName, email: nuEmail, phone: nuPhone, password: nuPass, role: creatingUser }),
+    });
+    const j = await res.json();
+    setNuBusy(false);
+    if (!j.ok) return flash("❌ " + (j.error || "Failed"));
+    flash(`✅ ${creatingUser === "vendor" ? "Vendor" : "Client"} account created`);
+    setCreatingUser(null); setNuName(""); setNuEmail(""); setNuPhone(""); setNuPass("");
+    setSection((s) => s);
+    if (creatingUser === "vendor") setVendors([]); else setClients([]);
+    // trigger reload of the visible list
+    const { data } = await supabase.rpc("admin_users_by_role", { p_role: creatingUser });
+    if (creatingUser === "vendor") setVendors((data as UserRow[]) ?? []); else setClients((data as UserRow[]) ?? []);
+  }
+
   // sms
   const [smsKey, setSmsKey] = useState("");
   const [smsSecret, setSmsSecret] = useState("");
@@ -257,13 +286,20 @@ export default function Admin() {
 
           {/* CRUD KLIEN / VENDOR */}
           {(section === "klien" || section === "vendor") && (
-            <UserTable
-              rows={section === "klien" ? clients : vendors}
-              isVendor={section === "vendor"}
-              loading={loadingReport}
-              onRole={setRole}
-              onDelete={delUser}
-            />
+            <div>
+              <div className="mb-4 flex justify-end">
+                <button onClick={() => setCreatingUser(section === "vendor" ? "vendor" : "user")} className="pj-btn-primary px-4 py-2">
+                  + Add {section === "vendor" ? "Vendor" : "Client"}
+                </button>
+              </div>
+              <UserTable
+                rows={section === "klien" ? clients : vendors}
+                isVendor={section === "vendor"}
+                loading={loadingReport}
+                onRole={setRole}
+                onDelete={delUser}
+              />
+            </div>
           )}
 
           {/* REPORTS */}
@@ -347,6 +383,29 @@ export default function Admin() {
         </div>
       </main>
 
+      {/* create user modal */}
+      {creatingUser && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setCreatingUser(null)}>
+          <div className="pj-card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">Add {creatingUser === "vendor" ? "Vendor" : "Client"}</h3>
+              <button onClick={() => setCreatingUser(null)} className="text-slate-400">✕</button>
+            </div>
+            <label className="mt-4 block text-sm font-medium">Full Name *</label>
+            <input value={nuName} onChange={(e) => setNuName(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+            <label className="mt-3 block text-sm font-medium">Email *</label>
+            <input type="email" value={nuEmail} onChange={(e) => setNuEmail(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+            <label className="mt-3 block text-sm font-medium">Phone (optional)</label>
+            <input value={nuPhone} onChange={(e) => setNuPhone(e.target.value)} placeholder="e.g. 0123456789" className="mt-1 w-full rounded-xl px-4 py-2.5" />
+            <label className="mt-3 block text-sm font-medium">Password *</label>
+            <input value={nuPass} onChange={(e) => setNuPass(e.target.value)} placeholder="min. 6 characters" className="mt-1 w-full rounded-xl px-4 py-2.5" />
+            <button onClick={createUser} disabled={nuBusy} className="pj-btn-primary mt-5 w-full py-3">
+              {nuBusy ? "Creating…" : "Create Account"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {toast && <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg dark:bg-white dark:text-slate-900">{toast}</div>}
     </div>
   );
@@ -415,16 +474,21 @@ function WithdrawTable({ rows, onProcess, loading }: { rows: Row[]; onProcess: (
     <div className="pj-card overflow-x-auto p-0">
       <table className="w-full text-left text-sm">
         <thead className="bg-slate-50 text-slate-500 dark:bg-white/5"><tr>
-          <th className="px-4 py-3">Nama</th><th className="px-4 py-3">Telefon</th><th className="px-4 py-3">Jumlah</th>
-          <th className="px-4 py-3">Kaedah</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tindakan</th>
+          <th className="px-4 py-3">Nama</th><th className="px-4 py-3">IC</th><th className="px-4 py-3">Jumlah</th>
+          <th className="px-4 py-3">TNG</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Tindakan</th>
         </tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={String(r.id)} className="border-t border-slate-100 dark:border-white/5">
-              <td className="px-4 py-3 font-medium">{fmt(r.user_name)}</td>
-              <td className="px-4 py-3">{fmt(r.whatsapp)}</td>
+              <td className="px-4 py-3 font-medium">{fmt(r.user_name)}<p className="text-xs font-normal text-slate-400">{fmt(r.whatsapp)}</p></td>
+              <td className="px-4 py-3">{fmt(r.ic_number)}</td>
               <td className="px-4 py-3 font-bold">{rm(r.amount)}</td>
-              <td className="px-4 py-3">{fmt(r.method)}</td>
+              <td className="px-4 py-3">
+                {fmt(r.tng_phone ?? r.method)}
+                {typeof r.tng_qr_url === "string" && r.tng_qr_url && (
+                  <a href={r.tng_qr_url} target="_blank" className="block text-xs font-semibold text-brand-600 hover:underline">View QR ↗</a>
+                )}
+              </td>
               <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${r.status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : r.status === "rejected" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10" : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"}`}>{String(r.status)}</span></td>
               <td className="px-4 py-3">
                 {r.status === "requested" ? (

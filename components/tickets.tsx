@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { compressImage } from "@/lib/compress";
 
 type Ticket = { id: number; type: string; subject: string | null; status: string; client_name?: string | null; updated_at: string };
 type Msg = { id: number; sender_id: string; sender_name: string | null; body: string | null; image_url: string | null; created_at: string };
@@ -55,10 +56,11 @@ export function TicketCenter({
   }, [supabase]);
 
   async function uploadImg(file: File): Promise<string | null> {
+    const compact = await compressImage(file);
     const { data: auth } = await supabase.auth.getUser();
-    const ext = file.name.split(".").pop() || "png";
+    const ext = compact.name.split(".").pop() || "jpg";
     const path = `${auth.user!.id}/${crypto.randomUUID().slice(0, 10)}.${ext}`;
-    const { error } = await supabase.storage.from("tickets").upload(path, file);
+    const { error } = await supabase.storage.from("tickets").upload(path, compact);
     if (error) { flash("❌ Upload failed"); return null; }
     return supabase.storage.from("tickets").getPublicUrl(path).data.publicUrl;
   }
