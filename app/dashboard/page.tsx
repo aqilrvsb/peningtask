@@ -243,34 +243,34 @@ export default function Dashboard() {
   const xpInLevel = (profile?.xp ?? 0) % 100;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+    <div className="min-h-screen">
+      <header className="pj-glass sticky top-0 z-30">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Logo />
           <div className="flex items-center gap-2">
             {profile?.role === "admin" && (
-              <Link href="/admin" className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900">
+              <Link href="/admin" className="rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-slate-900">
                 Admin
               </Link>
             )}
             {(profile?.role === "vendor" || profile?.role === "admin") && (
-              <Link href="/vendor" className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600">
+              <Link href="/vendor" className="pj-btn-primary px-3.5 py-2">
                 📣 Vendor
               </Link>
             )}
             {/* notifications bell */}
             <div className="relative">
-              <button onClick={openNotif} aria-label="Notifikasi" className="relative grid h-9 w-9 place-items-center rounded-lg border border-slate-200 dark:border-slate-700">
+              <button onClick={openNotif} aria-label="Notifikasi" className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white/70 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
                 🔔
                 {unread > 0 && (
-                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-white">
+                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-gradient px-1 text-[10px] font-bold text-white shadow-glow-sm">
                     {unread}
                   </span>
                 )}
               </button>
               {showNotif && (
-                <div className="absolute right-0 top-11 z-50 w-80 rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold dark:border-slate-800">Notifikasi</p>
+                <div className="pj-card absolute right-0 top-12 z-50 w-80 overflow-hidden p-0 shadow-card">
+                  <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold dark:border-white/10">Notifikasi</p>
                   <div className="max-h-80 overflow-y-auto">
                     {notifs.length === 0 ? (
                       <p className="p-5 text-center text-sm text-slate-400">Tiada notifikasi lagi.</p>
@@ -291,7 +291,7 @@ export default function Dashboard() {
                 if (supabase) await supabase.auth.signOut();
                 window.location.href = "/log-masuk";
               }}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              className="pj-btn-ghost px-3.5 py-2"
             >
               Log Keluar
             </button>
@@ -306,42 +306,46 @@ export default function Dashboard() {
           <>
             {/* Hero strip: level + stats */}
             <div className="grid gap-4 lg:grid-cols-4">
-              <div className="rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-5 text-white lg:col-span-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-brand-100">Baki Wallet</p>
-                    <p className="mt-1 text-3xl font-bold">{rm(profile?.wallet_balance ?? 0)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-brand-100">Level {profile?.level ?? 1} ⭐</p>
-                    <div className="mt-2 h-2 w-32 overflow-hidden rounded-full bg-white/25">
-                      <div className="h-full bg-white" style={{ width: `${xpInLevel}%` }} />
+              <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow lg:col-span-2">
+                <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
+                <div className="pointer-events-none absolute right-4 top-4 text-5xl opacity-20">💳</div>
+                <p className="text-sm font-medium text-white/80">Baki Wallet</p>
+                <p className="mt-1 text-4xl font-extrabold tracking-tight">{rm(profile?.wallet_balance ?? 0)}</p>
+                <div className="mt-5 flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-xs text-white/80">
+                      <span>Level {profile?.level ?? 1} ⭐</span>
+                      <span>{xpInLevel}/100 XP</span>
                     </div>
-                    <p className="mt-1 text-xs text-brand-100">{xpInLevel}/100 XP</p>
+                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/25">
+                      <div className="h-full rounded-full bg-white transition-all" style={{ width: `${xpInLevel}%` }} />
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-                <p className="text-sm text-slate-500">Jumlah Diperoleh</p>
-                <p className="mt-1 text-2xl font-bold text-brand-500">{rm(profile?.total_earned ?? 0)}</p>
+              <div className="pj-card p-5">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-lg dark:bg-brand-500/10">💰</span>
+                  Jumlah Diperoleh
+                </div>
+                <p className="mt-3 text-2xl font-extrabold text-gradient">{rm(profile?.total_earned ?? 0)}</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-                <p className="text-sm text-slate-500">Tugasan Selesai</p>
-                <p className="mt-1 text-2xl font-bold">{profile?.tasks_done ?? 0}</p>
+              <div className="pj-card p-5">
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent-500/10 text-lg">✅</span>
+                  Tugasan Selesai
+                </div>
+                <p className="mt-3 text-2xl font-extrabold">{profile?.tasks_done ?? 0}</p>
               </div>
             </div>
 
             {/* Tabs */}
-            <div className="mt-8 flex flex-wrap gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+            <div className="mt-8 flex flex-wrap gap-1.5 overflow-x-auto rounded-2xl border border-slate-200/70 bg-white/60 p-1.5 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
               {TABS.map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-semibold transition ${
-                    tab === t
-                      ? "border-brand-500 text-brand-500"
-                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
+                  className={`pj-tab ${tab === t ? "pj-tab-active" : ""}`}
                 >
                   {t}
                 </button>

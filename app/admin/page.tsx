@@ -18,7 +18,7 @@ type Wd = { id: number; user_id: string; amount: number; method: string | null; 
 type User = { id: string; full_name: string | null; whatsapp: string | null; wallet_balance: number; role: string };
 type Plat = { total_fees: number; total_vendors: number; active_campaigns: number; escrow_held: number };
 
-const TABS = ["Ringkasan", "Cipta Tugasan", "Submissions", "Pengeluaran", "Pengguna"] as const;
+const TABS = ["Ringkasan", "Cipta Tugasan", "Submissions", "Pengeluaran", "Pengguna", "SMS TAC"] as const;
 type Tab = (typeof TABS)[number];
 
 const PLATFORMS = ["Facebook", "Threads", "TikTok", "Instagram", "AI"];
@@ -47,6 +47,12 @@ export default function Admin() {
   const [targetUrl, setTargetUrl] = useState("");
   const [proofTypes, setProofTypes] = useState<string[]>(["image"]);
   const [busy, setBusy] = useState(false);
+
+  // SMS config
+  const [smsKey, setSmsKey] = useState("");
+  const [smsSecret, setSmsSecret] = useState("");
+  const [smsSender, setSmsSender] = useState("PeningJob");
+  const [savingSms, setSavingSms] = useState(false);
 
   const toggleProof = (p: string) =>
     setProofTypes((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
@@ -82,6 +88,14 @@ export default function Admin() {
     setUsers((us.data as User[]) ?? []);
     const p = Array.isArray(pf.data) ? pf.data[0] : pf.data;
     setPlat((p as Plat) ?? null);
+
+    const { data: sms } = await supabase.rpc("admin_get_sms_config");
+    const s = Array.isArray(sms) ? sms[0] : sms;
+    if (s) {
+      setSmsKey(s.app_key ?? "");
+      setSmsSecret(s.app_secret ?? "");
+      setSmsSender(s.sender ?? "PeningJob");
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -124,6 +138,19 @@ export default function Admin() {
     flash(error ? "❌ " + error.message : "↩️ Ditolak, tugasan dibuka semula");
     load();
   }
+  async function saveSms() {
+    if (!supabase) return;
+    setSavingSms(true);
+    const { error } = await supabase.rpc("admin_set_sms_config", {
+      p_key: smsKey,
+      p_secret: smsSecret,
+      p_sender: smsSender,
+    });
+    setSavingSms(false);
+    if (error) flash("❌ " + error.message);
+    else flash("✅ Konfigurasi SMS disimpan");
+  }
+
   async function setRole(id: string, role: "user" | "vendor") {
     if (!supabase) return;
     const { error } = await supabase.rpc("admin_set_role", { p_user: id, p_role: role });
@@ -390,6 +417,27 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {tab === "SMS TAC" && (
+            <div className="max-w-lg rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+              <h2 className="text-lg font-semibold">Konfigurasi SMS TAC (360 Bulk SMS)</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Kod TAC pendaftaran dihantar melalui gerbang 360. Masukkan kredensial API anda di sini.
+              </p>
+              <label className="mt-5 block text-sm font-medium">APP_KEY (user)</label>
+              <input value={smsKey} onChange={(e) => setSmsKey(e.target.value)} placeholder="cth: 7LrdwRb1Ya" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 font-mono text-sm dark:border-slate-700 dark:bg-slate-950" />
+              <label className="mt-4 block text-sm font-medium">APP_SECRET (pass)</label>
+              <input value={smsSecret} onChange={(e) => setSmsSecret(e.target.value)} placeholder="cth: aAjc9I7mW5eGzxwY…" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 font-mono text-sm dark:border-slate-700 dark:bg-slate-950" />
+              <label className="mt-4 block text-sm font-medium">Sender ID (from)</label>
+              <input value={smsSender} onChange={(e) => setSmsSender(e.target.value)} placeholder="PeningJob" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-950" />
+              <button onClick={saveSms} disabled={savingSms} className="mt-5 w-full rounded-xl bg-brand-500 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
+                {savingSms ? "Menyimpan…" : "Simpan Konfigurasi SMS"}
+              </button>
+              <div className="mt-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                ⚠️ Penting: 360 memerlukan <b>IP server di-whitelist</b>. Server Vercel guna IP dinamik — pastikan anda whitelist julat IP Vercel di 360 (Configurations → Whitelist IPs), atau guna proksi IP statik. Tanpa ini, 360 pulangkan kod 403.
+              </div>
             </div>
           )}
         </div>

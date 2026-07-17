@@ -52,7 +52,7 @@ function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label="Tukar mod"
-      className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 dark:border-slate-700"
+      className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white/70 text-base transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
     >
       {dark ? "☀️" : "🌙"}
     </button>
@@ -71,12 +71,16 @@ const NAV = [
 export function Nav() {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
+    <header className="pj-glass sticky top-0 z-40">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <Logo />
-        <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex dark:text-slate-300">
+        <nav className="hidden items-center gap-1 rounded-full border border-slate-200/60 bg-white/50 p-1 text-sm font-medium text-slate-600 lg:flex dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="hover:text-brand-500">
+            <Link
+              key={n.href}
+              href={n.href}
+              className="rounded-full px-3.5 py-1.5 transition hover:bg-white hover:text-brand-600 hover:shadow-sm dark:hover:bg-white/10"
+            >
               {n.label}
             </Link>
           ))}
@@ -85,19 +89,16 @@ export function Nav() {
           <ThemeToggle />
           <Link
             href="/log-masuk"
-            className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 sm:block dark:text-slate-200 dark:hover:bg-slate-800"
+            className="hidden rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 sm:block dark:text-slate-200 dark:hover:bg-white/10"
           >
             Log Masuk
           </Link>
-          <Link
-            href="/daftar"
-            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
-          >
-            Daftar
+          <Link href="/daftar" className="pj-btn-primary px-4 py-2">
+            Daftar Percuma
           </Link>
           <button
             onClick={() => setOpen((v) => !v)}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 md:hidden dark:border-slate-700"
+            className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white/70 lg:hidden dark:border-white/10 dark:bg-white/5"
             aria-label="Menu"
           >
             ☰
@@ -105,13 +106,13 @@ export function Nav() {
         </div>
       </div>
       {open && (
-        <div className="border-t border-slate-200 px-4 py-2 md:hidden dark:border-slate-800">
+        <div className="border-t border-slate-200/70 px-4 py-2 lg:hidden dark:border-white/10">
           {NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               onClick={() => setOpen(false)}
-              className="block py-2 text-sm font-medium text-slate-700 dark:text-slate-200"
+              className="block rounded-lg px-2 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5"
             >
               {n.label}
             </Link>
@@ -124,8 +125,9 @@ export function Nav() {
 
 export function Footer() {
   return (
-    <footer className="border-t border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:grid-cols-2 md:grid-cols-4">
+    <footer className="relative mt-10 border-t border-slate-200/70 bg-white/50 dark:border-white/10 dark:bg-white/[0.02]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand-400/50 to-transparent" />
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:grid-cols-2 md:grid-cols-4">
         <div>
           <Logo />
           <p className="mt-3 max-w-xs text-sm text-slate-500 dark:text-slate-400">
@@ -158,8 +160,8 @@ export function Footer() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-slate-200 py-5 text-center text-xs text-slate-400 dark:border-slate-800">
-        © 2026 PeningJob. Dibina di Malaysia.
+      <div className="border-t border-slate-200/70 py-5 text-center text-xs text-slate-400 dark:border-white/10">
+        © 2026 PeningJob. Dibina dengan ❤️ di Malaysia.
       </div>
     </footer>
   );
