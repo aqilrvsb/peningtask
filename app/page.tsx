@@ -57,6 +57,53 @@ const STATS = [
   { v: "24 jam", l: "Proses withdraw" },
 ];
 
+function FeatureCard({
+  img,
+  badge,
+  tag,
+  title,
+  body,
+  cta,
+  href,
+}: {
+  img: string;
+  badge?: string;
+  tag?: string;
+  title: string;
+  body: string;
+  cta?: string;
+  href?: string;
+}) {
+  return (
+    <div className="pj-card pj-card-hover group flex flex-col overflow-hidden p-0">
+      <div className="relative aspect-[16/10] overflow-hidden bg-gradient-to-br from-brand-50 to-brand-100/60">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={img} alt={title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.06]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white to-transparent" />
+        {badge && (
+          <span className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/90 text-base font-black text-brand-600 shadow-soft backdrop-blur">
+            {badge}
+          </span>
+        )}
+        {tag && (
+          <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-brand-600 shadow-soft backdrop-blur">
+            {tag}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col p-6">
+        <h3 className="text-lg font-bold">{title}</h3>
+        <p className="mt-2 flex-1 text-sm text-slate-600 dark:text-slate-400">{body}</p>
+        {cta && href && (
+          <Link href={href} className="mt-4 inline-flex items-center gap-1 font-semibold text-brand-600 transition group-hover:gap-2 dark:text-brand-400">
+            {cta} →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   return (
     <div>
@@ -157,22 +204,9 @@ export default function Home() {
             Setiap interaksi datang daripada pengguna sebenar yang boleh dipercayai.
           </p>
         </div>
-        <div className="relative mt-14 grid gap-6 md:grid-cols-3">
-          <div className="pointer-events-none absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-transparent via-brand-300/60 to-transparent md:block" />
+        <div className="mt-14 grid gap-6 md:grid-cols-3">
           {STEPS.map((s) => (
-            <div key={s.n} className="pj-card pj-card-hover relative p-7">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={s.img}
-                alt={s.title}
-                className="h-20 w-20 rounded-2xl object-cover shadow-glow-sm"
-              />
-              <div className="absolute right-6 top-6 text-5xl font-black text-slate-100 dark:text-white/5">
-                {s.n}
-              </div>
-              <h3 className="mt-5 text-lg font-bold">{s.title}</h3>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{s.body}</p>
-            </div>
+            <FeatureCard key={s.n} img={s.img} badge={s.n} title={s.title} body={s.body} />
           ))}
         </div>
         <div className="mt-9 flex flex-wrap justify-center gap-3 text-sm">
@@ -222,22 +256,11 @@ export default function Home() {
         </div>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {[
-            { tag: "Ganjaran Terus", icon: "💸", title: "Buat Tugasan", body: "Selesaikan tugasan ringkas ikut masa lapang anda dan kumpul ganjaran tunai terus ke wallet.", href: "/daftar", cta: "Daftar & Mula" },
-            { tag: "Gamifikasi", icon: "🏆", title: "Naik Level & Leaderboard", body: "Setiap tugasan beri XP. Naik level, panjat leaderboard, dan tunjuk pencapaian anda.", href: "/leaderboard", cta: "Lihat Leaderboard" },
-            { tag: "10% Komisyen", icon: "🤝", title: "Jemput Rakan", body: "Kongsi link anda — dapat RM0.10 setiap rakan daftar + komisyen berterusan.", href: "/daftar", cta: "Daftar Sekarang" },
+            { img: "/cara1.png", tag: "Ganjaran Terus", title: "Buat Tugasan", body: "Selesaikan tugasan ringkas ikut masa lapang anda dan kumpul ganjaran tunai terus ke wallet.", href: "/daftar", cta: "Daftar & Mula" },
+            { img: "/cara2.png", tag: "Gamifikasi", title: "Naik Level & Leaderboard", body: "Setiap tugasan beri XP. Naik level, panjat leaderboard, dan tunjuk pencapaian anda.", href: "/leaderboard", cta: "Lihat Leaderboard" },
+            { img: "/cara3.png", tag: "10% Komisyen", title: "Jemput Rakan", body: "Kongsi link anda — dapat RM0.10 setiap rakan daftar + komisyen berterusan.", href: "/daftar", cta: "Daftar Sekarang" },
           ].map((c) => (
-            <div key={c.title} className="pj-card pj-card-hover group relative flex flex-col overflow-hidden p-7">
-              <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brand-400/10 blur-2xl transition group-hover:bg-brand-400/20" />
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-50 text-2xl dark:bg-white/5">{c.icon}</div>
-              <span className="mt-4 w-fit rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
-                {c.tag}
-              </span>
-              <h3 className="mt-3 text-xl font-bold">{c.title}</h3>
-              <p className="mt-2 flex-1 text-sm text-slate-600 dark:text-slate-400">{c.body}</p>
-              <Link href={c.href} className="mt-5 inline-flex items-center gap-1 font-semibold text-brand-600 transition group-hover:gap-2 dark:text-brand-400">
-                {c.cta} →
-              </Link>
-            </div>
+            <FeatureCard key={c.title} img={c.img} tag={c.tag} title={c.title} body={c.body} href={c.href} cta={c.cta} />
           ))}
         </div>
       </section>
@@ -253,16 +276,12 @@ export default function Home() {
         </div>
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: "🎓", who: "Pelajar", body: "Tukar masa scroll antara kelas jadi duit poket. Tiada modal, buat ikut masa lapang." },
-            { icon: "🏠", who: "Suri Rumah", body: "Jana pendapatan dari rumah sambil uruskan keluarga — beberapa minit sehari sudah memadai." },
-            { icon: "💼", who: "Pekerja Part-time", body: "Income tambahan waktu malam & hujung minggu, terus masuk wallet dan withdraw ke bank." },
-            { icon: "🚀", who: "Peminat Sosial", body: "Kenali cara engagement organik berfungsi dari dalam — sambil dibayar untuk masa anda." },
+            { img: "/kisah1.png", who: "Pelajar", body: "Tukar masa scroll antara kelas jadi duit poket. Tiada modal, buat ikut masa lapang." },
+            { img: "/kisah2.png", who: "Suri Rumah", body: "Jana pendapatan dari rumah sambil uruskan keluarga — beberapa minit sehari sudah memadai." },
+            { img: "/kisah3.png", who: "Pekerja Part-time", body: "Income tambahan waktu malam & hujung minggu, terus masuk wallet dan withdraw ke bank." },
+            { img: "/kisah4.png", who: "Peminat Sosial", body: "Kenali cara engagement organik berfungsi dari dalam — sambil dibayar untuk masa anda." },
           ].map((s) => (
-            <div key={s.who} className="pj-card pj-card-hover p-6">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-50 text-2xl dark:bg-white/5">{s.icon}</div>
-              <h3 className="mt-4 font-bold">{s.who}</h3>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{s.body}</p>
-            </div>
+            <FeatureCard key={s.who} img={s.img} title={s.who} body={s.body} />
           ))}
         </div>
         <p className="mt-6 text-center text-xs text-slate-400">
