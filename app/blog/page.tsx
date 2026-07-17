@@ -10,7 +10,7 @@ export const POSTS = [
     date: "Julai 2026",
     body: [
       "Ramai orang fikir menjana pendapatan online memerlukan modal besar atau kemahiran teknikal. Sebenarnya, tugasan mikro (micro-tasks) adalah cara paling mudah untuk bermula — anda hanya perlukan telefon dan akaun media sosial.",
-      "Di TugasKu, setiap tugasan mempunyai nilai ganjaran yang jelas sebelum anda mula. Selesaikan tugasan seperti follow akaun, like post, atau tulis komen — hantar bukti, dan ganjaran masuk terus ke wallet selepas disemak.",
+      "Di PeningJob, setiap tugasan mempunyai nilai ganjaran yang jelas sebelum anda mula. Selesaikan tugasan seperti follow akaun, like post, atau tulis komen — hantar bukti, dan ganjaran masuk terus ke wallet selepas disemak.",
       "Tip daripada kami: konsisten lebih penting daripada volume. 10-15 minit sehari secara tetap boleh mengumpul jumlah yang bermakna dalam sebulan, ditambah XP untuk naik level.",
       "Bila baki wallet cukup, mohon pengeluaran ke bank atau e-wallet anda. Proses semakan mengambil masa kurang 24 jam waktu bekerja.",
     ],
@@ -24,7 +24,7 @@ export const POSTS = [
     body: [
       "Bot boleh memberikan 10,000 followers dalam sehari — tetapi followers itu tidak menonton video anda, tidak komen, dan tidak membeli. Algoritma platform mengesan corak ini dan menurunkan capaian akaun anda.",
       "Engagement organik daripada pengguna sebenar berbeza: profil lengkap, aktiviti semula jadi, dan interaksi yang mengikut kadar masa yang munasabah (drip-feed).",
-      "Di TugasKu, setiap interaksi datang daripada ahli komuniti sebenar di Malaysia. Mereka mendapat ganjaran untuk masa mereka, anda mendapat engagement yang kelihatan — dan memang — sahih.",
+      "Di PeningJob, setiap interaksi datang daripada ahli komuniti sebenar di Malaysia. Mereka mendapat ganjaran untuk masa mereka, anda mendapat engagement yang kelihatan — dan memang — sahih.",
       "Pelaburan kecil dalam engagement berkualiti memberi pulangan lebih baik daripada angka besar yang kosong.",
     ],
   },
@@ -37,7 +37,7 @@ export const POSTS = [
     body: [
       "1. Jangan guna akaun utama untuk volume tinggi — pelbagaikan aktiviti anda supaya kekal semula jadi.",
       "2. Buat tugasan mengikut kadar manusia. Jangan selesaikan 50 tugasan dalam 5 minit; ambil masa seperti penggunaan biasa.",
-      "3. Jangan sesekali kongsi kata laluan. TugasKu tidak pernah meminta kata laluan media sosial anda — bukti hanya melalui screenshot atau link.",
+      "3. Jangan sesekali kongsi kata laluan. PeningJob tidak pernah meminta kata laluan media sosial anda — bukti hanya melalui screenshot atau link.",
       "4. Pastikan aktiviti anda pelbagai: selang-seli antara scroll biasa, posting sendiri, dan tugasan.",
       "5. Jika platform memberi amaran aktiviti, berhenti seketika. Akaun sihat lebih bernilai daripada mana-mana ganjaran.",
     ],
@@ -50,7 +50,7 @@ export default function Blog() {
       <Nav />
       <section className="mx-auto max-w-4xl px-4 py-14">
         <div className="text-center">
-          <h1 className="text-3xl font-bold sm:text-4xl">Blog TugasKu</h1>
+          <h1 className="text-3xl font-bold sm:text-4xl">Blog PeningJob</h1>
           <p className="mt-3 text-slate-600 dark:text-slate-300">
             Panduan & tip untuk pembuat tugasan dan pemilik bisnes.
           </p>

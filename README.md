@@ -1,4 +1,4 @@
-# TugasKu
+# PeningJob
 
 Platform komuniti tugasan ganjaran & engagement (Next.js + Tailwind + Supabase).
 Brand & copy adalah original — struktur/flow direka semula dari kosong.

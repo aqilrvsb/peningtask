@@ -32,7 +32,7 @@ export default function Leaderboard() {
         <div className="text-center">
           <h1 className="text-3xl font-bold sm:text-4xl">🏆 Papan Pendahulu</h1>
           <p className="mt-3 text-slate-600 dark:text-slate-300">
-            Top 10 pengguna paling banyak menjana ganjaran di TugasKu.
+            Top 10 pengguna paling banyak menjana ganjaran di PeningJob.
           </p>
         </div>
 

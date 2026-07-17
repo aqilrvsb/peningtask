@@ -3,7 +3,7 @@ import { Nav, Footer } from "@/components/site";
 const SECTIONS = [
   {
     h: "1. Akaun & Kelayakan",
-    p: "Anda mesti berumur 18 tahun ke atas (atau mendapat kebenaran penjaga) untuk menggunakan TugasKu. Satu individu dibenarkan memiliki satu akaun sahaja. Akaun berganda akan digantung.",
+    p: "Anda mesti berumur 18 tahun ke atas (atau mendapat kebenaran penjaga) untuk menggunakan PeningJob. Satu individu dibenarkan memiliki satu akaun sahaja. Akaun berganda akan digantung.",
   },
   {
     h: "2. Tugasan & Ganjaran",

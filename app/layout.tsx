@@ -4,13 +4,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://peningtask-eight.vercel.app"),
   title: {
-    default: "TugasKu — Buat Tugasan, Kumpul Ganjaran & Naikkan Engagement",
-    template: "%s · TugasKu",
+    default: "PeningJob — Buat Tugasan, Kumpul Ganjaran & Naikkan Engagement",
+    template: "%s · PeningJob",
   },
   description:
     "Platform komuniti Malaysia: selesaikan tugasan ringkas untuk ganjaran tunai, atau naikkan engagement Facebook, Threads, TikTok & Instagram anda dengan pengguna sebenar.",
   openGraph: {
-    title: "TugasKu — Buat Tugasan, Kumpul Ganjaran",
+    title: "PeningJob — Buat Tugasan, Kumpul Ganjaran",
     description:
       "Buat tugasan ringkas, kumpul ganjaran tunai. Naikkan engagement sosial dengan komuniti sebenar Malaysia.",
     locale: "ms_MY",

@@ -18,7 +18,7 @@ const STEPS = [
   {
     n: "2",
     title: "Komuniti Selesaikan Tugasan",
-    body: "Ahli TugasKu yang aktif menyelesaikan tugasan ringkas mengikut arahan dan dibayar ganjaran tunai.",
+    body: "Ahli PeningJob yang aktif menyelesaikan tugasan ringkas mengikut arahan dan dibayar ganjaran tunai.",
   },
   {
     n: "3",
@@ -191,7 +191,7 @@ export default function Home() {
               {
                 tag: "10% Komisyen",
                 title: "Jadi Affiliate",
-                body: "Jemput rakan menyertai TugasKu dan dapat komisyen setiap pembelian mereka.",
+                body: "Jemput rakan menyertai PeningJob dan dapat komisyen setiap pembelian mereka.",
                 href: "/daftar",
                 cta: "Daftar Sekarang →",
               },

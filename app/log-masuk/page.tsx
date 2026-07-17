@@ -34,7 +34,7 @@ export default function LoginPage() {
         </div>
         <h1 className="mt-6 text-center text-2xl font-bold">Log Masuk</h1>
         <p className="mt-1 text-center text-sm text-slate-500">
-          Selamat kembali ke TugasKu 👋
+          Selamat kembali ke PeningJob 👋
         </p>
 
         <form onSubmit={loginEmail} className="mt-6 space-y-3">

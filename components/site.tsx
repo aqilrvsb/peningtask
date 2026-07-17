@@ -29,7 +29,7 @@ export function Logo({ size = 32 }: { size?: number }) {
     <Link href="/" className="flex items-center gap-2 text-lg font-extrabold tracking-tight">
       <LogoMark size={size} />
       <span>
-        Tugas<span className="text-brand-500">Ku</span>
+        Pening<span className="text-brand-500">Job</span>
       </span>
     </Link>
   );
@@ -159,7 +159,7 @@ export function Footer() {
         </div>
       </div>
       <div className="border-t border-slate-200 py-5 text-center text-xs text-slate-400 dark:border-slate-800">
-        © 2026 TugasKu. Dibina di Malaysia.
+        © 2026 PeningJob. Dibina di Malaysia.
       </div>
     </footer>
   );

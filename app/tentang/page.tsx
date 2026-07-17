@@ -6,10 +6,10 @@ export default function Tentang() {
     <div>
       <Nav />
       <section className="mx-auto max-w-3xl px-4 py-16">
-        <h1 className="text-center text-3xl font-bold sm:text-4xl">Tentang TugasKu</h1>
+        <h1 className="text-center text-3xl font-bold sm:text-4xl">Tentang PeningJob</h1>
         <div className="mt-8 space-y-5 text-slate-600 dark:text-slate-300">
           <p>
-            TugasKu ialah platform komuniti Malaysia yang menghubungkan dua pihak:
+            PeningJob ialah platform komuniti Malaysia yang menghubungkan dua pihak:
             <b> individu</b> yang mahu menjana pendapatan sampingan melalui tugasan
             ringkas, dan <b>pemilik bisnes</b> yang mahu meningkatkan kehadiran media
             sosial mereka dengan interaksi daripada pengguna sebenar.
@@ -21,7 +21,7 @@ export default function Tentang() {
           </p>
           <p>
             Platform ini dibina sepenuhnya di Malaysia, untuk rakyat Malaysia. Dari
-            pelajar yang mencari duit poket hingga usahawan yang membina brand — TugasKu
+            pelajar yang mencari duit poket hingga usahawan yang membina brand — PeningJob
             adalah untuk anda.
           </p>
         </div>

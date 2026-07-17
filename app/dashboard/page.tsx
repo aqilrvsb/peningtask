@@ -367,7 +367,7 @@ export default function Dashboard() {
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
                     <h3 className="font-semibold">🏆 Papan Pendahulu</h3>
-                    <p className="mt-1 text-sm text-slate-500">Lihat siapa paling banyak menjana di TugasKu.</p>
+                    <p className="mt-1 text-sm text-slate-500">Lihat siapa paling banyak menjana di PeningJob.</p>
                     <Link href="/leaderboard" className="mt-3 inline-block font-semibold text-brand-500 hover:underline">
                       Lihat Leaderboard →
                     </Link>
@@ -412,7 +412,7 @@ export default function Dashboard() {
                           <div>
                             <p className="font-semibold">{t.action}</p>
                             <p className="text-sm text-slate-500">
-                              {EMOJI[t.platform] ?? ""} {t.platform} · oleh <b>{t.vendor_name ?? "TugasKu"}</b> · +10 XP
+                              {EMOJI[t.platform] ?? ""} {t.platform} · oleh <b>{t.vendor_name ?? "PeningJob"}</b> · +10 XP
                             </p>
                           </div>
                         </div>
@@ -551,7 +551,7 @@ export default function Dashboard() {
                     </button>
                   </div>
                   <a
-                    href={`https://wa.me/?text=${encodeURIComponent("Jom join TugasKu — buat tugasan ringkas, dapat duit! " + refLink)}`}
+                    href={`https://wa.me/?text=${encodeURIComponent("Jom join PeningJob — buat tugasan ringkas, dapat duit! " + refLink)}`}
                     target="_blank"
                     className="mt-3 inline-block rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                   >
@@ -599,7 +599,7 @@ export default function Dashboard() {
                     {EMOJI[activeTask.platform] ?? "⭐"} {activeTask.action}
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    oleh <b>{activeTask.vendor_name ?? "TugasKu"}</b> · {activeTask.platform} · Ganjaran{" "}
+                    oleh <b>{activeTask.vendor_name ?? "PeningJob"}</b> · {activeTask.platform} · Ganjaran{" "}
                     <b className="text-brand-500">{rm(activeTask.reward)}</b> · +10 XP
                   </p>
                 </div>
