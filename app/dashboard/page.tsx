@@ -27,6 +27,7 @@ const NAV = [
   { key: "success", icon: "✅", label: "Job Success" },
   { key: "rejected", icon: "❌", label: "Job Rejected" },
   { key: "wallet", icon: "👛", label: "Wallet" },
+  { key: "earners", icon: "🏆", label: "Top Earners" },
   { key: "support", icon: "🎫", label: "Support" },
   { key: "settings", icon: "⚙️", label: "Settings" },
 ];
@@ -62,6 +63,21 @@ export default function Dashboard() {
   const [mpPlatform, setMpPlatform] = useState("All");
   const [jobPlatform, setJobPlatform] = useState("All");
   const [jobDate, setJobDate] = useState("");
+
+  // top earners
+  const [earnPeriod, setEarnPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [earners, setEarners] = useState<{ rank: number; name: string; jobs: number; earned: number }[]>([]);
+  const [earnersLoading, setEarnersLoading] = useState(false);
+
+  useEffect(() => {
+    if (section !== "earners" || !supabase) return;
+    (async () => {
+      setEarnersLoading(true);
+      const { data } = await supabase.rpc("top_earners", { p_period: earnPeriod });
+      setEarners((data as typeof earners) ?? []);
+      setEarnersLoading(false);
+    })();
+  }, [section, earnPeriod, supabase]);
 
   // submit-proof modal (for an accepted/pending job)
   const [submitTarget, setSubmitTarget] = useState<MyJob | null>(null);
@@ -174,6 +190,26 @@ export default function Dashboard() {
 
   const xpInLevel = (profile?.xp ?? 0) % 100;
   const shownJobs = mpPlatform === "All" ? jobs : jobs.filter((j) => j.platform === mpPlatform);
+
+  // 14-day earnings series (positive txns grouped by day)
+  const earnSeries = useMemo(() => {
+    const days: { label: string; total: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const total = txns.filter((t) => t.amount > 0 && t.created_at.slice(0, 10) === key)
+        .reduce((a, t) => a + Number(t.amount), 0);
+      days.push({ label: key.slice(5), total });
+    }
+    return days;
+  }, [txns]);
+  const earnMax = Math.max(0.01, ...earnSeries.map((d) => d.total));
+  const jobCounts = useMemo(() => ({
+    pending: myJobs.filter((j) => j.status === "accepted").length,
+    review: myJobs.filter((j) => j.status === "pending").length,
+    success: myJobs.filter((j) => j.status === "approved").length,
+    rejected: myJobs.filter((j) => j.status === "rejected").length,
+  }), [myJobs]);
   const mine = (status: string, withDate: boolean) => myJobs.filter((j) => j.status === status)
     .filter((j) => jobPlatform === "All" || j.platform === jobPlatform)
     .filter((j) => !withDate || !jobDate || j.created_at.slice(0, 10) === jobDate);
@@ -193,6 +229,45 @@ export default function Dashboard() {
       {s === "approved" ? "Success" : s === "rejected" ? "Rejected" : s === "accepted" ? "Pending" : "In Review"}
     </span>
   );
+
+  function JobTable({ rows, onApply }: { rows: Job[]; onApply: (j: Job) => void }) {
+    if (rows.length === 0) return <p className="pj-card p-12 text-center text-slate-400">No jobs available right now. Check back soon 🙌</p>;
+    return (
+      <div className="pj-card overflow-x-auto p-0">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-white/10">
+              <th className="px-5 py-3.5">Platform</th>
+              <th className="px-5 py-3.5">Job</th>
+              <th className="px-5 py-3.5">Vendor</th>
+              <th className="px-5 py-3.5">Reward</th>
+              <th className="px-5 py-3.5">Status</th>
+              <th className="px-5 py-3.5 text-right"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((j) => (
+              <tr key={j.id} className="group border-b border-slate-50 transition last:border-0 hover:bg-brand-50/40 dark:border-white/5 dark:hover:bg-white/5">
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-2.5">
+                    {j.vendor_logo ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={j.vendor_logo} alt="" className="h-9 w-9 rounded-xl border border-slate-200 object-cover dark:border-white/10" /> : ICON_KEY[j.platform] ? <PlatformIcon name={ICON_KEY[j.platform]} size={36} /> : <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 dark:bg-white/5">⭐</span>}
+                    <span className="hidden text-xs font-medium text-slate-500 sm:block">{j.platform}</span>
+                  </div>
+                </td>
+                <td className="max-w-[220px] truncate px-5 py-3.5 font-semibold">{j.action}</td>
+                <td className="px-5 py-3.5 text-slate-500">{j.vendor_name}</td>
+                <td className="px-5 py-3.5 font-extrabold text-gradient">{rm(j.reward)}</td>
+                <td className="px-5 py-3.5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:bg-emerald-500/10">Active</span></td>
+                <td className="px-5 py-3.5 text-right">
+                  <button onClick={() => onApply(j)} className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-sm font-bold transition hover:border-transparent hover:bg-brand-gradient hover:text-white hover:shadow-glow-sm dark:border-white/10" title="Apply">+</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   function JobList({ status, withDate, showSubmit }: { status: string; withDate: boolean; showSubmit?: boolean }) {
     const rows = mine(status, withDate);
@@ -234,7 +309,15 @@ export default function Dashboard() {
       <aside className={`${navOpen ? "block" : "hidden"} border-r border-slate-200/70 bg-white/70 backdrop-blur lg:block lg:w-60 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
         <div className="sticky top-0 max-h-screen overflow-y-auto p-4">
           <Logo />
-          <nav className="mt-6 space-y-1">
+          {/* avatar */}
+          <div className="mt-6 flex flex-col items-center rounded-2xl bg-slate-50/80 p-4 text-center dark:bg-white/5">
+            <div className="grid h-14 w-14 place-items-center rounded-full bg-brand-gradient text-xl font-extrabold text-white shadow-glow-sm">
+              {(profile?.full_name || "U").trim().charAt(0).toUpperCase()}
+            </div>
+            <p className="mt-2 max-w-full truncate text-sm font-bold">{profile?.full_name || "User"}</p>
+            <p className="text-xs text-slate-400">Level {profile?.level ?? 1} · {profile?.xp ?? 0} XP</p>
+          </div>
+          <nav className="mt-4 space-y-1">
             {NAV.map((it) => (
               <button key={it.key} onClick={() => { setSection(it.key); setNavOpen(false); }}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${section === it.key ? "bg-brand-gradient text-white shadow-glow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
@@ -275,24 +358,71 @@ export default function Dashboard() {
           <>
           {section === "dashboard" && (
             <div className="space-y-6">
-              <div className="grid gap-4 lg:grid-cols-4">
-                <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow lg:col-span-2">
+              {/* top row — balance + charts (reference layout) */}
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
                   <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-                  <p className="text-sm text-white/80">Wallet Balance</p>
-                  <p className="mt-1 text-4xl font-extrabold">{rm(profile?.wallet_balance)}</p>
-                  <div className="mt-5"><div className="flex justify-between text-xs text-white/80"><span>Level {profile?.level ?? 1} ⭐</span><span>{xpInLevel}/100 XP</span></div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${xpInLevel}%` }} /></div></div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/80">Account Balance</p>
+                  <p className="mt-2 text-4xl font-extrabold tracking-tight">{rm(profile?.wallet_balance)}</p>
+                  <div className="mt-5 flex gap-2">
+                    <button onClick={() => setSection("marketplace")} className="grid h-11 w-11 place-items-center rounded-xl bg-white/20 text-lg backdrop-blur transition hover:bg-white/30" title="Browse jobs">🛒</button>
+                    <button onClick={() => setSection("wallet")} className="grid h-11 w-11 place-items-center rounded-xl bg-white/20 text-lg backdrop-blur transition hover:bg-white/30" title="Wallet">👛</button>
+                    <button onClick={withdraw} className="ml-auto rounded-xl bg-white px-4 py-2 text-sm font-bold text-brand-600 transition hover:scale-[1.03]">Withdraw</button>
+                  </div>
+                  <div className="mt-4">
+                    <div className="flex justify-between text-[11px] text-white/75"><span>Level {profile?.level ?? 1} ⭐</span><span>{xpInLevel}/100 XP</span></div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${xpInLevel}%` }} /></div>
+                  </div>
                 </div>
-                <div className="pj-card p-5"><div className="flex items-center gap-2 text-sm text-slate-500"><span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-lg dark:bg-brand-500/10">💰</span>Total Earned</div><p className="mt-3 text-2xl font-extrabold text-gradient">{rm(profile?.total_earned)}</p></div>
-                <div className="pj-card p-5"><div className="flex items-center gap-2 text-sm text-slate-500"><span className="grid h-9 w-9 place-items-center rounded-xl bg-accent-500/10 text-lg">✅</span>Jobs Completed</div><p className="mt-3 text-2xl font-extrabold">{profile?.tasks_done ?? 0}</p></div>
+
+                {/* earnings chart — single series, brand hue */}
+                <div className="pj-card p-5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Earnings · last 14 days</p>
+                  <p className="mt-1 text-2xl font-extrabold text-gradient">{rm(earnSeries.reduce((a, d) => a + d.total, 0))}</p>
+                  <div className="mt-4 flex h-20 items-end gap-[3px]">
+                    {earnSeries.map((d) => (
+                      <div key={d.label} className="group relative flex-1">
+                        <div
+                          className="w-full rounded-t bg-brand-500/90 transition group-hover:bg-brand-600"
+                          style={{ height: `${Math.max(3, (d.total / earnMax) * 72)}px` }}
+                        />
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white group-hover:block dark:bg-white dark:text-slate-900">
+                          {d.label} · {rm(d.total)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-1 flex justify-between text-[10px] text-slate-400"><span>{earnSeries[0]?.label}</span><span>{earnSeries[13]?.label}</span></div>
+                </div>
+
+                {/* jobs by status */}
+                <div className="pj-card p-5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Jobs Overview</p>
+                  <p className="mt-1 text-2xl font-extrabold">{myJobs.length} <span className="text-sm font-semibold text-slate-400">total</span></p>
+                  <div className="mt-4 space-y-2.5">
+                    {[
+                      { l: "Pending", v: jobCounts.pending, cls: "bg-slate-400" },
+                      { l: "In Review", v: jobCounts.review, cls: "bg-amber-500" },
+                      { l: "Success", v: jobCounts.success, cls: "bg-brand-500" },
+                      { l: "Rejected", v: jobCounts.rejected, cls: "bg-rose-500" },
+                    ].map((s) => (
+                      <div key={s.l} className="flex items-center gap-2 text-sm">
+                        <span className={`h-2.5 w-2.5 rounded-full ${s.cls}`} />
+                        <span className="text-slate-600 dark:text-slate-300">{s.l}</span>
+                        <span className="ml-auto font-bold">{s.v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="pj-card p-6">
-                <h2 className="text-lg font-semibold">Welcome, {profile?.full_name} 👋</h2>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Find jobs in the Marketplace, complete them & submit proof to earn rewards.</p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button onClick={() => setSection("marketplace")} className="pj-btn-primary px-5 py-2.5">🛒 Browse Jobs ({jobs.length})</button>
-                  <button onClick={() => setSection("settings")} className="pj-btn-ghost px-5 py-2.5">⚙️ Complete Profile</button>
+
+              {/* available jobs preview (reference table) */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-xl font-extrabold tracking-tight">Available Jobs</h2>
+                  <button onClick={() => setSection("marketplace")} className="text-sm font-semibold text-brand-600 hover:underline dark:text-brand-400">View all →</button>
                 </div>
+                <JobTable rows={jobs.slice(0, 6)} onApply={acceptJob} />
               </div>
             </div>
           )}
@@ -302,22 +432,7 @@ export default function Dashboard() {
               <div className="mb-5 flex flex-wrap gap-2">
                 {PLATFORMS.map((p) => <button key={p} onClick={() => setMpPlatform(p)} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>{p}</button>)}
               </div>
-              {shownJobs.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">No {mpPlatform !== "All" ? mpPlatform : ""} jobs right now. Check back soon 🙌</p> : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {shownJobs.map((j) => (
-                    <div key={j.id} className="pj-card pj-card-hover flex flex-col p-5">
-                      <div className="flex items-center gap-3">
-                        {j.vendor_logo ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={j.vendor_logo} alt="" className="h-11 w-11 rounded-xl border border-slate-200 object-cover dark:border-white/10" /> : ICON_KEY[j.platform] ? <PlatformIcon name={ICON_KEY[j.platform]} size={44} /> : <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 dark:bg-white/5">⭐</span>}
-                        <div className="min-w-0"><p className="truncate font-bold">{j.action}</p><p className="text-xs text-slate-500">{j.platform} · by <b>{j.vendor_name}</b></p></div>
-                      </div>
-                      <div className="mt-4 flex items-end justify-between">
-                        <span className="text-2xl font-extrabold text-gradient">{rm(j.reward)}</span>
-                        <button onClick={() => acceptJob(j)} className="pj-btn-primary px-4 py-2">Apply</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <JobTable rows={shownJobs} onApply={acceptJob} />
             </div>
           )}
 
@@ -349,6 +464,40 @@ export default function Dashboard() {
                 <p className="border-b border-slate-100 px-4 py-3 text-sm font-semibold dark:border-white/10">Recent Transactions</p>
                 {txns.length === 0 ? <p className="p-6 text-center text-sm text-slate-400">No transactions.</p> : <ul className="divide-y divide-slate-100 dark:divide-white/5">{txns.map((x) => <li key={x.id} className="flex items-center justify-between px-4 py-3 text-sm"><span className="text-slate-600 dark:text-slate-300">{x.note ?? x.kind}</span><span className={`font-semibold ${x.amount >= 0 ? "text-brand-600" : "text-rose-500"}`}>{x.amount >= 0 ? "+" : ""}{rm(x.amount)}</span></li>)}</ul>}
               </div>
+            </div>
+          )}
+
+          {section === "earners" && (
+            <div className="mx-auto max-w-2xl">
+              <div className="mb-5 flex justify-center gap-2">
+                {(["daily", "weekly", "monthly"] as const).map((p) => (
+                  <button key={p} onClick={() => setEarnPeriod(p)} className={`rounded-full px-5 py-2 text-sm font-bold capitalize transition ${earnPeriod === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>{p}</button>
+                ))}
+              </div>
+              {earnersLoading ? (
+                <p className="pj-card p-12 text-center text-slate-400">Loading…</p>
+              ) : earners.length === 0 ? (
+                <div className="pj-card p-12 text-center">
+                  <p className="text-4xl">🏆</p>
+                  <p className="mt-3 font-semibold">No earnings recorded {earnPeriod === "daily" ? "today" : `this ${earnPeriod.replace("ly", "")}`} yet.</p>
+                  <p className="mt-1 text-sm text-slate-500">Complete jobs to claim the top spot!</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {earners.map((e, i) => (
+                    <div key={e.rank} className={`pj-card flex items-center gap-4 p-4 ${i < 3 ? "ring-1 ring-brand-300/50" : ""}`}>
+                      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-50 text-lg font-bold dark:bg-white/5">
+                        {["🥇", "🥈", "🥉"][i] ?? <span className="text-slate-400">{e.rank}</span>}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-bold">{e.name}</p>
+                        <p className="text-xs text-slate-500">{e.jobs} jobs completed</p>
+                      </div>
+                      <p className="font-extrabold text-gradient">{rm(e.earned)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
