@@ -8,26 +8,28 @@ import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
-type Campaign = { id: number; platform: string; title: string | null; quantity: number; delivered: number; escrow: number; fee: number; status: string; created_at: string };
+type Campaign = {
+  id: number; platform: string; title: string | null; quantity: number; delivered: number;
+  reward_each: number; fee_pct: number; deadline: string | null; expired: boolean;
+  invoice: number; invoice_fee: number; invoice_total: number;
+  payment_status: string; receipt_url: string | null; admin_reject_reason: string | null; created_at: string;
+};
 type Sub = {
   id: number; task_id: number; job_title: string; platform: string; reward: number;
   client_name: string | null; client_profile_url: string | null; description: string | null;
   proof_urls: string[] | null; evidence_type: string; created_at: string;
 };
-type Txn = { id: number; amount: number; kind: string; note: string | null; created_at: string };
 
 const NAV = [
   { key: "dashboard", icon: "📊", label: "Dashboard" },
   { key: "create", icon: "➕", label: "Create Job" },
   { key: "review", icon: "🔍", label: "Review Submissions" },
   { key: "jobs", icon: "📋", label: "My Jobs" },
-  { key: "wallet", icon: "👛", label: "Wallet" },
   { key: "support", icon: "🎫", label: "Support" },
   { key: "brand", icon: "🏷️", label: "Brand" },
 ];
 const PLATFORMS = ["TikTok", "Instagram", "Facebook", "YouTube", "Threads", "Shopee"];
 const ICON_KEY: Record<string, string> = { Facebook: "facebook", Threads: "threads", Instagram: "instagram", YouTube: "youtube", TikTok: "tiktok", Shopee: "shopee" };
-const FEE_PCT = 20;
 
 function rm(n: unknown) { return "RM " + Number(n || 0).toFixed(2); }
 
@@ -38,10 +40,8 @@ export default function VendorPanel() {
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [wallet, setWallet] = useState(0);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [subs, setSubs] = useState<Sub[]>([]);
-  const [txns, setTxns] = useState<Txn[]>([]);
 
   // brand
   const [bizName, setBizName] = useState("");
@@ -62,10 +62,11 @@ export default function VendorPanel() {
   const [instructions, setInstructions] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [exampleFiles, setExampleFiles] = useState<File[]>([]);
+  const [feePct, setFeePct] = useState(20);
   const [busy, setBusy] = useState(false);
 
   const total = Math.round(reward * count * 100) / 100;
-  const fee = Math.round(total * FEE_PCT) / 100;
+  const fee = Math.round(total * feePct) / 100;
   const charge = Math.round((total + fee) * 100) / 100;
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3500); };
@@ -77,17 +78,16 @@ export default function VendorPanel() {
     const { data: prof } = await supabase.from("profiles").select("role,wallet_balance,business_name,avatar_url").eq("id", auth.user.id).single();
     if (!prof || !["vendor", "admin"].includes(prof.role)) { setAllowed(false); return; }
     setAllowed(true);
-    setWallet(Number(prof.wallet_balance));
     setBizName(prof.business_name ?? "");
     setLogoUrl(prof.avatar_url ?? null);
-    const [c, s, w] = await Promise.all([
-      supabase.from("campaigns").select("id,platform,title,quantity,delivered,escrow,fee,status,created_at").eq("owner", auth.user.id).order("created_at", { ascending: false }),
+    const [c, s, fp] = await Promise.all([
+      supabase.rpc("vendor_my_jobs"),
       supabase.rpc("vendor_pending_submissions"),
-      supabase.from("wallet_transactions").select("id,amount,kind,note,created_at").eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(20),
+      supabase.rpc("get_fee_pct"),
     ]);
     setCampaigns((c.data as Campaign[]) ?? []);
     setSubs((s.data as Sub[]) ?? []);
-    setTxns((w.data as Txn[]) ?? []);
+    if (typeof fp.data === "number") setFeePct(fp.data);
   }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
@@ -96,9 +96,10 @@ export default function VendorPanel() {
     if (!supabase) return;
     if (!jobName.trim()) return flash("⚠️ Enter the job name");
     if (!instructions.trim()) return flash("⚠️ Write the job instructions");
+    if (!deadline) return flash("⚠️ Set an expiry date");
     setBusy(true);
-    const exampleUrls: string[] = [];
     const { data: auth } = await supabase.auth.getUser();
+    const exampleUrls: string[] = [];
     for (const fl of exampleFiles) {
       const compact = await compressImage(fl);
       const ext = compact.name.split(".").pop() || "jpg";
@@ -112,14 +113,29 @@ export default function VendorPanel() {
       p_evidence_type: evidenceType, p_claim_mode: claimMode,
       p_per_user_quota: claimMode === "multi" ? perUserQuota : 1,
       p_duration_min: durationMin || null,
-      p_deadline: deadline ? new Date(deadline).toISOString() : null,
+      p_deadline: new Date(deadline).toISOString(),
       p_instructions: instructions, p_target_url: targetUrl || null, p_example_urls: exampleUrls,
     });
     setBusy(false);
     if (error) return flash("❌ " + error.message);
-    flash(`✅ Job published! ${count} slots are now open.`);
+    flash("✅ Job is now live on the marketplace!");
     setJobName(""); setInstructions(""); setTargetUrl(""); setExampleFiles([]); setDeadline("");
     load(); setSection("jobs");
+  }
+
+  async function submitReceipt(cid: number, file: File) {
+    if (!supabase) return;
+    const { data: auth } = await supabase.auth.getUser();
+    const f = file.type.startsWith("image/") ? await compressImage(file) : file;
+    const ext = f.name.split(".").pop() || "pdf";
+    const path = `${auth.user!.id}/receipt-${cid}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("receipts").upload(path, f);
+    if (upErr) return flash("❌ Upload failed: " + upErr.message);
+    const url = supabase.storage.from("receipts").getPublicUrl(path).data.publicUrl;
+    const { error } = await supabase.rpc("vendor_submit_receipt", { p_cid: cid, p_receipt_url: url });
+    if (error) return flash("❌ " + error.message);
+    flash("✅ Receipt submitted — awaiting admin verification.");
+    load();
   }
 
   async function decide(id: number, ok: boolean) {
@@ -135,15 +151,6 @@ export default function VendorPanel() {
     if (error) return flash("❌ " + error.message);
     flash(ok ? "✅ Approved — worker paid from escrow" : "Submission rejected");
     load();
-  }
-
-  async function topup() {
-    if (!supabase) return;
-    const v = prompt("Topup amount (RM):", "50");
-    if (!v) return;
-    const { error } = await supabase.rpc("topup_wallet", { p_amount: Number(v) });
-    flash(error ? "❌ " + error.message : "✅ Wallet topped up " + rm(Number(v)));
-    if (!error) load();
   }
 
   async function saveBrand() {
@@ -167,8 +174,7 @@ export default function VendorPanel() {
     flash("✅ Brand saved — your logo now shows on every job");
   }
 
-  const activeCampaigns = campaigns.filter((c) => c.status === "running").length;
-  const escrowHeld = campaigns.reduce((a, c) => a + (c.status === "running" ? Number(c.escrow) : 0), 0);
+  const dueCount = campaigns.filter((c) => c.expired && c.delivered > 0 && c.payment_status !== "paid").length;
   const activeLabel = NAV.find((n) => n.key === section)?.label ?? "";
 
   if (allowed === false)
@@ -202,7 +208,7 @@ export default function VendorPanel() {
               </div>
             )}
             <p className="mt-2 max-w-full truncate text-sm font-bold">{bizName || "Your Brand"}</p>
-            <p className="text-xs text-slate-400">{rm(wallet)} balance</p>
+            <p className="text-xs text-slate-400">Vendor account</p>
           </div>
           <nav className="mt-4 space-y-1">
             {NAV.map((it) => (
@@ -232,16 +238,16 @@ export default function VendorPanel() {
           <>
           {section === "dashboard" && (
             <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-extrabold">Welcome, {bizName || "Vendor"} 👋</h2>
+                <p className="text-slate-500">Publish engagement jobs, review proofs, pay after each campaign.</p>
+              </div>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-5 text-white shadow-glow">
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/80">Wallet Balance</p>
-                  <p className="mt-2 text-3xl font-extrabold">{rm(wallet)}</p>
-                  <button onClick={topup} className="mt-3 rounded-xl bg-white px-4 py-1.5 text-sm font-bold text-brand-600">+ Topup</button>
-                </div>
                 {[
-                  { l: "Active Jobs", v: activeCampaigns, icon: "📋" },
+                  { l: "Active Jobs", v: campaigns.filter((c) => !c.expired).length, icon: "📋" },
                   { l: "Pending Review", v: subs.length, icon: "🔍", hot: subs.length > 0 },
-                  { l: "Escrow Held", v: rm(escrowHeld), icon: "🔒" },
+                  { l: "Payment Due", v: dueCount, icon: "🧾", hot: dueCount > 0 },
+                  { l: "Fee Rate", v: `${feePct}%`, icon: "⚙️" },
                 ].map((s) => (
                   <div key={s.l} className={`pj-card p-5 ${s.hot ? "ring-1 ring-amber-300" : ""}`}>
                     <div className="flex items-center justify-between"><p className="text-xs font-semibold text-slate-500">{s.l}</p><span className="text-lg">{s.icon}</span></div>
@@ -252,10 +258,10 @@ export default function VendorPanel() {
               <div className="pj-card p-6">
                 <h2 className="text-lg font-semibold">How it works 📣</h2>
                 <ol className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                  <li>1️⃣ <b>Topup</b> your wallet</li>
-                  <li>2️⃣ <b>Create a job</b> — cost = reward × quota + {FEE_PCT}% platform fee (held in escrow)</li>
-                  <li>3️⃣ Community members take your job &amp; submit proof</li>
-                  <li>4️⃣ <b>Review proofs</b> — approve to pay from escrow, or reject with a reason</li>
+                  <li>1️⃣ <b>Create a job</b> — set quota, reward &amp; expiry date. It goes live instantly (free).</li>
+                  <li>2️⃣ Community members complete it &amp; submit proof</li>
+                  <li>3️⃣ <b>Review proofs</b> — approve (workers get paid) or reject with a reason</li>
+                  <li>4️⃣ After expiry, an <b>invoice</b> is generated (delivered × reward + {feePct}% fee) — upload your receipt &amp; admin verifies</li>
                 </ol>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button onClick={() => setSection("create")} className="pj-btn-primary px-5 py-2.5">+ Create Job</button>
@@ -290,8 +296,9 @@ export default function VendorPanel() {
                   <input type="number" min="1" value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" />
                 </div>
               </div>
-              <label className="mt-4 block text-sm font-medium">Job Deadline (optional)</label>
+              <label className="mt-4 block text-sm font-medium">Expiry Date *</label>
               <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+              <p className="mt-1 text-xs text-slate-400">After this date the job leaves the marketplace and an invoice is generated for the work delivered.</p>
               <label className="mt-4 block text-sm font-medium">Evidence Type *</label>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 {([["image", "📷 By Images"], ["video", "🎬 By Video URL"]] as const).map(([k, l]) => (
@@ -325,12 +332,14 @@ export default function VendorPanel() {
               <input type="file" accept="image/*" multiple onChange={(e) => setExampleFiles(Array.from(e.target.files ?? []))} className="mt-1 w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm dark:border-white/10" />
               {exampleFiles.length > 0 && <p className="mt-1 text-xs text-brand-500">✓ {exampleFiles.length} image(s) selected (auto-compressed)</p>}
               <div className="mt-5 space-y-1 rounded-xl bg-slate-50 p-4 text-sm dark:bg-white/5">
+                <p className="mb-1 font-bold">Estimated quotation (max)</p>
                 <div className="flex justify-between"><span className="text-slate-500">Rewards ({count} × {rm(reward)})</span><span>{rm(total)}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Platform fee ({FEE_PCT}%)</span><span>{rm(fee)}</span></div>
-                <div className="flex justify-between border-t border-slate-200 pt-1 font-bold dark:border-white/10"><span>Total charge</span><span className="text-brand-600">{rm(charge)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Platform fee ({feePct}%)</span><span>{rm(fee)}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-1 font-bold dark:border-white/10"><span>Max total</span><span className="text-brand-600">{rm(charge)}</span></div>
+                <p className="pt-1 text-xs text-slate-400">💡 Post-paid: you only pay for jobs actually completed. Final invoice is generated after the expiry date.</p>
               </div>
               <button onClick={createJob} disabled={busy} className="pj-btn-primary mt-4 w-full py-3">
-                {busy ? "Publishing…" : `Publish Job (${rm(charge)} from wallet)`}
+                {busy ? "Publishing…" : "Publish Job (free — pay after expiry)"}
               </button>
             </div>
           )}
@@ -387,58 +396,60 @@ export default function VendorPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((c) => (
+                    {campaigns.filter((c) => !c.expired).map((c) => (
                       <tr key={c.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
                         <td className="max-w-[220px] truncate px-5 py-3.5 font-semibold">{c.title || `Job #${c.id}`}</td>
-                        <td className="px-5 py-3.5">
-                          <span className="flex w-fit items-center gap-1.5">{ICON_KEY[c.platform] && <PlatformIcon name={ICON_KEY[c.platform]} size={22} />}{c.platform}</span>
-                        </td>
+                        <td className="px-5 py-3.5"><span className="flex w-fit items-center gap-1.5">{ICON_KEY[c.platform] && <PlatformIcon name={ICON_KEY[c.platform]} size={22} />}{c.platform}</span></td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
                             <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"><div className="h-full rounded-full bg-brand-gradient" style={{ width: `${Math.min(100, (c.delivered / c.quantity) * 100)}%` }} /></div>
                             <span className="text-xs text-slate-500">{c.delivered}/{c.quantity}</span>
                           </div>
                         </td>
-                        <td className="px-5 py-3.5">{rm(c.escrow)}</td>
-                        <td className="px-5 py-3.5">{rm(c.fee)}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${c.status === "completed" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10"}`}>{c.status === "completed" ? "Completed" : "Running"}</span>
-                        </td>
+                        <td className="px-5 py-3.5 text-xs text-slate-500">{c.deadline ? new Date(c.deadline).toLocaleString("en-MY") : "—"}</td>
+                        <td className="px-5 py-3.5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:bg-emerald-500/10">Live</span></td>
                       </tr>
                     ))}
+                    {campaigns.filter((c) => !c.expired).length === 0 && <tr><td colSpan={5} className="p-6 text-center text-sm text-slate-400">No active jobs.</td></tr>}
                   </tbody>
                 </table>
               )}
-            </div>
-          )}
 
-          {section === "wallet" && (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-4">
-                <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
-                  <p className="text-sm text-white/80">Wallet Balance</p>
-                  <p className="mt-1 text-3xl font-extrabold">{rm(wallet)}</p>
-                  <button onClick={topup} className="mt-4 rounded-xl bg-white px-5 py-2.5 font-semibold text-brand-600 hover:scale-[1.02]">+ Topup Wallet</button>
-                  <p className="mt-2 text-xs text-white/80">Job cost (rewards + {FEE_PCT}% fee) is deducted from this balance.</p>
-                </div>
-                <div className="pj-card p-5 text-sm text-slate-500">
-                  <p className="font-bold text-slate-700 dark:text-slate-200">💡 Escrow protection</p>
-                  <p className="mt-1">When you publish a job, the reward pool is held in escrow. Workers are paid only when you approve their proof.</p>
-                </div>
-              </div>
-              <div className="pj-card overflow-hidden p-0">
-                <p className="border-b border-slate-100 px-5 py-3.5 font-bold dark:border-white/10">Recent Transactions</p>
-                {txns.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">No transactions.</p> : (
-                  <ul className="divide-y divide-slate-100 dark:divide-white/5">
-                    {txns.map((x) => (
-                      <li key={x.id} className="flex items-center justify-between px-5 py-3.5 text-sm">
-                        <div><p className="font-medium text-slate-700 dark:text-slate-200">{x.note ?? x.kind}</p><p className="text-xs text-slate-400">{new Date(x.created_at).toLocaleString("en-MY")}</p></div>
-                        <span className={`font-bold ${x.amount >= 0 ? "text-brand-600" : "text-rose-500"}`}>{x.amount >= 0 ? "+" : ""}{rm(x.amount)}</span>
-                      </li>
+              {campaigns.some((c) => c.expired) && (
+                <div className="mt-6">
+                  <h2 className="text-lg font-bold">🧾 Expired Jobs — Payment Due</h2>
+                  <p className="text-sm text-slate-500">Attach your payment receipt (PDF/image) for the invoice below. Admin will verify.</p>
+                  <div className="mt-3 space-y-3">
+                    {campaigns.filter((c) => c.expired).map((c) => (
+                      <div key={c.id} className="pj-card p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <p className="font-bold">{c.title} <span className="text-xs font-normal text-slate-400">· {c.platform} · {c.delivered}/{c.quantity} completed</span></p>
+                            <div className="mt-2 rounded-xl bg-slate-50 p-3 text-sm dark:bg-white/5">
+                              <div className="flex justify-between gap-8"><span className="text-slate-500">Delivered ({c.delivered} × {rm(c.reward_each)})</span><span>{rm(c.invoice)}</span></div>
+                              <div className="flex justify-between gap-8"><span className="text-slate-500">Platform fee ({c.fee_pct}%)</span><span>{rm(c.invoice_fee)}</span></div>
+                              <div className="mt-1 flex justify-between gap-8 border-t border-slate-200 pt-1 font-bold dark:border-white/10"><span>Invoice Total</span><span className="text-brand-600">{rm(c.invoice_total)}</span></div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-bold ${c.payment_status === "paid" ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : c.payment_status === "submitted" ? "bg-amber-50 text-amber-600 dark:bg-amber-500/10" : "bg-rose-50 text-rose-600 dark:bg-rose-500/10"}`}>
+                              {c.payment_status === "paid" ? "✅ Paid" : c.payment_status === "submitted" ? "⏳ Awaiting verification" : "Payment due"}
+                            </span>
+                            {c.admin_reject_reason && <p className="mt-1 text-xs text-rose-500">Rejected: {c.admin_reject_reason}</p>}
+                            {c.payment_status !== "paid" && c.payment_status !== "submitted" && (
+                              <label className="mt-3 block cursor-pointer rounded-xl bg-brand-gradient px-4 py-2 text-center text-sm font-bold text-white">
+                                📎 Upload Receipt
+                                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => { const fx = e.target.files?.[0]; if (fx) submitReceipt(c.id, fx); }} />
+                              </label>
+                            )}
+                            {c.receipt_url && <a href={c.receipt_url} target="_blank" className="mt-2 block text-xs font-semibold text-brand-600 hover:underline">View receipt ↗</a>}
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </ul>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

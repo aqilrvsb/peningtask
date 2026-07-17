@@ -38,10 +38,9 @@ export function Logo({ size = 32 }: { size?: number }) {
 const NAV = [
   { href: "/", label: "Utama" },
   { href: "/marketplace", label: "Kerja Terkini" },
-  { href: "/#cara", label: "Cara Berfungsi" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/#kisah", label: "Kisah Komuniti" },
-  { href: "/#faq", label: "Soalan Lazim" },
+  { href: "/sertai-vendor", label: "Sertai Vendor" },
 ];
 
 export function Nav() {

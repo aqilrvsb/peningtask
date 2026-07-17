@@ -26,9 +26,13 @@ const GROUPS = [
     { key: "vendor-komisen", icon: "💰", label: "Laporan Komisyen" },
     { key: "vendor-withdraw", icon: "🏦", label: "Laporan Pengeluaran" },
   ]},
+  { label: "Kewangan", items: [
+    { key: "payments", icon: "🧾", label: "Vendor Payments" },
+  ]},
   { label: "Sistem", items: [
     { key: "support", icon: "🎫", label: "Support (Withdrawal)" },
     { key: "sms", icon: "📱", label: "SMS TAC" },
+    { key: "settings", icon: "⚙️", label: "Fee Setting" },
   ]},
 ];
 
@@ -60,6 +64,28 @@ export default function Admin() {
   const [proofTypes, setProofTypes] = useState<string[]>(["image"]);
   const [busy, setBusy] = useState(false);
   const toggleProof = (p: string) => setProofTypes((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
+
+  // vendor payments + fee
+  const [payments, setPayments] = useState<Row[]>([]);
+  const [feePct, setFeePct] = useState("20");
+  const [savingFee, setSavingFee] = useState(false);
+
+  async function verifyPayment(cid: number, approve: boolean) {
+    if (!supabase) return;
+    let reason = "";
+    if (!approve) { reason = prompt("Reason for rejecting the receipt:") ?? ""; if (reason === "") return; }
+    const { error } = await supabase.rpc("admin_verify_payment", { p_cid: cid, p_approve: approve, p_reason: reason });
+    if (error) return flash("❌ " + error.message);
+    flash(approve ? "✅ Payment verified" : "Receipt rejected");
+    setPayments((p) => p.filter((x) => x.id !== cid));
+  }
+  async function saveFee() {
+    if (!supabase) return;
+    setSavingFee(true);
+    const { error } = await supabase.rpc("admin_set_fee", { p_pct: Number(feePct) });
+    setSavingFee(false);
+    flash(error ? "❌ " + error.message : `✅ Platform fee set to ${feePct}%`);
+  }
 
   // create user modal
   const [creatingUser, setCreatingUser] = useState<null | "user" | "vendor">(null);
@@ -133,6 +159,8 @@ export default function Admin() {
         else if (section === "klien-withdraw") setReport(((await supabase.rpc("admin_withdrawal_report", { p_role: "user" })).data as Row[]) ?? []);
         else if (section === "vendor-withdraw") setReport(((await supabase.rpc("admin_withdrawal_report", { p_role: "vendor" })).data as Row[]) ?? []);
         else if (section === "submissions") setSubs(((await supabase.from("submissions").select("*").eq("status", "pending").order("created_at", { ascending: false })).data as Sub[]) ?? []);
+        else if (section === "payments") setPayments(((await supabase.rpc("admin_vendor_payments")).data as Row[]) ?? []);
+        else if (section === "settings") { const fp = await supabase.rpc("get_fee_pct"); if (typeof fp.data === "number") setFeePct(String(fp.data)); }
       } finally { setLoadingReport(false); }
     })();
   }, [section, supabase, ok]);
@@ -364,6 +392,49 @@ export default function Admin() {
           )}
 
           {/* SMS */}
+          {section === "payments" && (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">Expired jobs with an invoice. Verify the vendor&apos;s payment receipt to confirm.</p>
+              {loadingReport ? <p className="pj-card p-10 text-center text-slate-400">Memuatkan…</p> : payments.length === 0 ? (
+                <p className="pj-card p-12 text-center text-slate-400">Tiada bayaran menunggu ✅</p>
+              ) : payments.map((r) => (
+                <div key={String(r.id)} className="pj-card p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="font-bold">{fmt(r.title)} <span className="text-xs font-normal text-slate-400">· {fmt(r.platform)} · {fmt(r.delivered)}/{fmt(r.quantity)} done</span></p>
+                      <p className="text-sm text-slate-500">🏢 {fmt(r.company ?? r.vendor_name)} · {fmt(r.whatsapp)}</p>
+                      <div className="mt-2 rounded-xl bg-slate-50 p-3 text-sm dark:bg-white/5">
+                        <div className="flex justify-between gap-8"><span className="text-slate-500">Invoice</span><span>{rm(r.invoice)}</span></div>
+                        <div className="flex justify-between gap-8"><span className="text-slate-500">Platform fee</span><span className="text-brand-600">{rm(r.invoice_fee)}</span></div>
+                        <div className="mt-1 flex justify-between gap-8 border-t border-slate-200 pt-1 font-bold dark:border-white/10"><span>Total</span><span>{rm(r.invoice_total)}</span></div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-bold ${r.payment_status === "submitted" ? "bg-amber-50 text-amber-600 dark:bg-amber-500/10" : "bg-rose-50 text-rose-600 dark:bg-rose-500/10"}`}>{r.payment_status === "submitted" ? "Receipt submitted" : "Awaiting receipt"}</span>
+                      {typeof r.receipt_url === "string" && r.receipt_url && <a href={r.receipt_url} target="_blank" className="mt-2 block text-sm font-semibold text-brand-600 hover:underline">View receipt ↗</a>}
+                      {r.payment_status === "submitted" && (
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={() => verifyPayment(Number(r.id), true)} className="pj-btn-primary px-3.5 py-1.5">Verify Paid</button>
+                          <button onClick={() => verifyPayment(Number(r.id), false)} className="pj-btn-ghost px-3.5 py-1.5">Reject</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {section === "settings" && (
+            <div className="max-w-md pj-card p-6">
+              <h2 className="text-lg font-semibold">Platform Fee Setting</h2>
+              <p className="mt-1 text-sm text-slate-500">The % charged on top of every vendor job invoice. Applies to new jobs.</p>
+              <label className="mt-4 block text-sm font-medium">Fee (%)</label>
+              <input type="number" min="0" max="90" step="0.5" value={feePct} onChange={(e) => setFeePct(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+              <button onClick={saveFee} disabled={savingFee} className="pj-btn-primary mt-5 w-full py-3">{savingFee ? "Saving…" : "Save Fee"}</button>
+            </div>
+          )}
+
           {section === "support" && supabase && <TicketCenter mode="admin" supabase={supabase} />}
 
           {section === "sms" && (
