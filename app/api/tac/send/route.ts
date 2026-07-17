@@ -29,7 +29,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Cooldown
+    // 2. Load SMS config first — no point storing an OTP we can't deliver
+    const { data: secrets } = await admin
+      .from("app_secrets")
+      .select("key,value")
+      .in("key", ["sms_app_key", "sms_app_secret", "sms_sender"]);
+    const cfg: Record<string, string> = {};
+    (secrets ?? []).forEach((r) => (cfg[r.key] = r.value ?? ""));
+    if (!cfg.sms_app_key || !cfg.sms_app_secret) {
+      return NextResponse.json(
+        { ok: false, error: "Perkhidmatan SMS belum dikonfigurasi. Sila hubungi admin." },
+        { status: 503 }
+      );
+    }
+
+    // 3. Cooldown
     const { data: prev } = await admin
       .from("phone_verifications")
       .select("last_sent_at")
@@ -45,7 +59,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3. Generate + store OTP
+    // 4. Generate + store OTP
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const { error: upErr } = await admin.from("phone_verifications").upsert({
       phone,
@@ -57,20 +71,6 @@ export async function POST(req: Request) {
     });
     if (upErr) {
       return NextResponse.json({ ok: false, error: "Ralat pangkalan data." }, { status: 500 });
-    }
-
-    // 4. Load SMS config
-    const { data: secrets } = await admin
-      .from("app_secrets")
-      .select("key,value")
-      .in("key", ["sms_app_key", "sms_app_secret", "sms_sender"]);
-    const cfg: Record<string, string> = {};
-    (secrets ?? []).forEach((r) => (cfg[r.key] = r.value ?? ""));
-    if (!cfg.sms_app_key || !cfg.sms_app_secret) {
-      return NextResponse.json(
-        { ok: false, error: "Perkhidmatan SMS belum dikonfigurasi. Sila hubungi admin." },
-        { status: 503 }
-      );
     }
 
     // 5. Send via 360 (Bulk360 v3.0)
