@@ -25,9 +25,10 @@ export async function POST(req: Request) {
       email = u.user.email;
     }
 
-    // verify credentials server-side with the anon client
-    const anon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
-    const { data, error } = await anon.auth.signInWithPassword({ email, password });
+    // verify credentials server-side (service key works as the project apikey;
+    // the password grant authenticates the user and returns their session)
+    const authClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+    const { data, error } = await authClient.auth.signInWithPassword({ email, password });
     if (error || !data.session) return NextResponse.json({ ok: false, error: "Emel/telefon atau kata laluan salah." }, { status: 400 });
 
     // role for post-login routing
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
     });
-  } catch (e) {
-    return NextResponse.json({ ok: false, error: "DEBUG: " + String((e as Error)?.message || e) }, { status: 500 });
+  } catch {
+    return NextResponse.json({ ok: false, error: "Ralat tidak dijangka." }, { status: 500 });
   }
 }
