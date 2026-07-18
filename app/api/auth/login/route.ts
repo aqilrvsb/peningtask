@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
     });
-  } catch {
-    return NextResponse.json({ ok: false, error: "Ralat tidak dijangka." }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: "DEBUG: " + String((e as Error)?.message || e) }, { status: 500 });
   }
 }
