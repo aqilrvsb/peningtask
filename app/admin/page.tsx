@@ -46,6 +46,7 @@ export default function Admin() {
   const [ok, setOk] = useState<boolean | null>(null);
   const [section, setSection] = useState("ringkasan");
   const [navOpen, setNavOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
   const [stats, setStats] = useState<Stats | null>(null);
@@ -142,6 +143,7 @@ export default function Admin() {
     if (!supabase) return;
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { window.location.href = "/log-masuk"; return; }
+    setUserEmail(auth.user.email ?? "");
     const { data: prof } = await supabase.from("profiles").select("role").eq("id", auth.user.id).single();
     if (prof?.role !== "admin") { setOk(false); return; }
     setOk(true);
@@ -253,13 +255,14 @@ export default function Admin() {
   return (
     <div className="min-h-screen lg:flex">
       {/* Sidebar */}
-      <aside className={`${navOpen ? "block" : "hidden"} border-r border-slate-200/70 bg-white/70 backdrop-blur lg:block lg:w-64 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
-        <div className="sticky top-0 max-h-screen overflow-y-auto p-4">
+      <aside className={`${navOpen ? "flex" : "hidden"} sticky top-0 h-screen flex-col border-r border-slate-200/70 bg-white/70 backdrop-blur lg:flex lg:w-64 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
+        <div className="shrink-0 p-4">
           <div className="flex items-center justify-between">
             <Logo />
             <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white dark:bg-white dark:text-slate-900">ADMIN</span>
           </div>
-          <nav className="mt-6 space-y-5">
+        </div>
+        <nav className="flex-1 space-y-5 overflow-y-auto px-4 pb-2">
             {GROUPS.map((g, gi) => (
               <div key={gi}>
                 {g.label && <p className="px-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">{g.label}</p>}
@@ -283,7 +286,15 @@ export default function Admin() {
               </div>
             ))}
           </nav>
-          <Link href="/dashboard" className="mt-6 block rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">← Kembali ke Dashboard</Link>
+        <div className="shrink-0 border-t border-slate-200/70 p-3 dark:border-white/10">
+          <div className="flex items-center gap-3 rounded-xl px-2 py-1.5">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-bold text-white dark:bg-white dark:text-slate-900">{(userEmail || "A").trim().charAt(0).toUpperCase()}</div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">Admin</p>
+              <p className="truncate text-xs text-slate-400">{userEmail}</p>
+            </div>
+            <button onClick={async () => { if (supabase) await supabase.auth.signOut(); window.location.href = "/log-masuk"; }} title="Log keluar" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-white/5">⎋</button>
+          </div>
         </div>
       </aside>
 

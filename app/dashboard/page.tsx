@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [userEmail, setUserEmail] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [myJobs, setMyJobs] = useState<MyJob[]>([]);
   const [txns, setTxns] = useState<Txn[]>([]);
@@ -113,6 +114,7 @@ export default function Dashboard() {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { window.location.href = "/log-masuk"; return; }
     const uid = auth.user.id;
+    setUserEmail(auth.user.email ?? "");
     const [p, mj, jb, w, wd, nf, ws] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", uid).single(),
       supabase.rpc("client_my_jobs"),
@@ -327,27 +329,38 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen lg:flex">
       {/* Sidebar */}
-      <aside className={`${navOpen ? "block" : "hidden"} border-r border-slate-200/70 bg-white/70 backdrop-blur lg:block lg:w-60 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
-        <div className="sticky top-0 max-h-screen overflow-y-auto p-4">
+      <aside className={`${navOpen ? "flex" : "hidden"} sticky top-0 h-screen flex-col border-r border-slate-200/70 bg-white/70 backdrop-blur lg:flex lg:w-60 lg:shrink-0 dark:border-white/10 dark:bg-slate-950/60`}>
+        {/* pinned top: brand + avatar */}
+        <div className="shrink-0 p-4">
           <Logo />
-          {/* avatar */}
-          <div className="mt-6 flex flex-col items-center rounded-2xl bg-slate-50/80 p-4 text-center dark:bg-white/5">
+          <div className="mt-4 flex flex-col items-center rounded-2xl bg-slate-50/80 p-4 text-center dark:bg-white/5">
             <div className="grid h-14 w-14 place-items-center rounded-full bg-brand-gradient text-xl font-extrabold text-white shadow-glow-sm">
               {(profile?.full_name || "U").trim().charAt(0).toUpperCase()}
             </div>
             <p className="mt-2 max-w-full truncate text-sm font-bold">{profile?.full_name || "User"}</p>
             <p className="text-xs text-slate-400">Level {profile?.level ?? 1} · {profile?.xp ?? 0} XP</p>
           </div>
-          <nav className="mt-4 space-y-1">
-            {NAV.map((it) => (
-              <button key={it.key} onClick={() => { setSection(it.key); setNavOpen(false); }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${section === it.key ? "bg-brand-gradient text-white shadow-glow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
-                <span className="text-base">{it.icon}</span>{it.label}
-                {it.key === "pending" && pendingCount > 0 && <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{pendingCount}</span>}
-              </button>
-            ))}
-          </nav>
-          <button onClick={async () => { if (supabase) await supabase.auth.signOut(); window.location.href = "/log-masuk"; }} className="mt-6 block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">Log Out</button>
+        </div>
+        {/* scrollable nav */}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-2">
+          {NAV.map((it) => (
+            <button key={it.key} onClick={() => { setSection(it.key); setNavOpen(false); }}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${section === it.key ? "bg-brand-gradient text-white shadow-glow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
+              <span className="text-base">{it.icon}</span>{it.label}
+              {it.key === "pending" && pendingCount > 0 && <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{pendingCount}</span>}
+            </button>
+          ))}
+        </nav>
+        {/* pinned bottom: user card */}
+        <div className="shrink-0 border-t border-slate-200/70 p-3 dark:border-white/10">
+          <div className="flex items-center gap-3 rounded-xl px-2 py-1.5">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-bold text-white">{(profile?.full_name || userEmail || "U").trim().charAt(0).toUpperCase()}</div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">{profile?.full_name || "User"}</p>
+              <p className="truncate text-xs text-slate-400">{userEmail}</p>
+            </div>
+            <button onClick={async () => { if (supabase) await supabase.auth.signOut(); window.location.href = "/log-masuk"; }} title="Log out" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-white/5">⎋</button>
+          </div>
         </div>
       </aside>
 
