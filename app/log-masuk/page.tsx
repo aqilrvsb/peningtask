@@ -6,7 +6,7 @@ import { Logo } from "@/components/site";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,18 +19,16 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setLoading(false); setMsg(error.message); return; }
-    // route by role: admin → /admin, vendor → /vendor, else client dashboard
-    let dest = "/dashboard";
-    if (data.user) {
-      const { data: prof } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
-      if (prof?.role === "admin") dest = "/admin";
-      else if (prof?.role === "vendor") dest = "/vendor";
-    }
-    setLoading(false);
-    window.location.href = dest;
+    try {
+      // resolve email-or-phone + verify password server-side, get a session
+      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, password }) });
+      const j = await res.json();
+      if (!j.ok) { setLoading(false); setMsg(j.error || "Log masuk gagal."); return; }
+      const supabase = createClient();
+      await supabase.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+      const dest = j.role === "admin" ? "/admin" : j.role === "vendor" ? "/vendor" : "/dashboard";
+      window.location.href = dest;
+    } catch { setLoading(false); setMsg("Ralat rangkaian."); }
   }
 
   return (
@@ -46,11 +44,11 @@ export default function LoginPage() {
 
         <form onSubmit={loginEmail} className="mt-6 space-y-3">
           <input
-            type="email"
+            type="text"
             required
-            placeholder="Emel"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Emel atau No. Telefon"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             className="pj-input"
           />
           <input
