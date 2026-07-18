@@ -6,6 +6,7 @@ import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
 import { formatDuration } from "@/lib/duration";
+import { jobTypesFor } from "@/lib/jobtypes";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Profile = {
@@ -17,7 +18,7 @@ type Profile = {
   url_youtube: string | null; url_tiktok: string | null;
 };
 type Job = {
-  id: number; platform: string; title: string; description: string | null; reward: number;
+  id: number; platform: string; job_type: string | null; title: string; description: string | null; reward: number;
   quota: number; taken: number; duration_min: number | null; evidence_type: string;
   claim_mode: string; per_user_quota: number; deadline: string | null; target_url: string | null;
   starts_at: string | null; all_day: boolean;
@@ -71,6 +72,7 @@ export default function Dashboard() {
   const [showNotif, setShowNotif] = useState(false);
 
   const [mpPlatform, setMpPlatform] = useState("All");
+  const [mpJobType, setMpJobType] = useState("Semua");
   const [jobPlatform, setJobPlatform] = useState("All");
   const [jobDate, setJobDate] = useState("");
 
@@ -206,7 +208,9 @@ export default function Dashboard() {
     flash(error ? "❌ " + error.message : "✅ Settings saved"); if (!error) load();
   }
 
-  const shownJobs = mpPlatform === "All" ? jobs : jobs.filter((j) => j.platform === mpPlatform);
+  const shownJobs = jobs
+    .filter((j) => mpPlatform === "All" || j.platform === mpPlatform)
+    .filter((j) => mpJobType === "Semua" || j.job_type === mpJobType);
 
   // 14-day earnings series (positive txns grouped by day)
   const earnSeries = useMemo(() => {
@@ -432,13 +436,22 @@ export default function Dashboard() {
 
           {section === "marketplace" && !jobDetail && (
             <div>
-              <div className="mb-5 flex flex-wrap gap-2">
+              <div className="mb-3 flex flex-wrap gap-2">
                 {PLATFORMS.map((p) => (
-                  <button key={p} onClick={() => setMpPlatform(p)} className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>
+                  <button key={p} onClick={() => { setMpPlatform(p); setMpJobType("Semua"); }} className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>
                     {ICON_KEY[p] && <PlatformIcon name={ICON_KEY[p]} size={20} />}{p}
                   </button>
                 ))}
               </div>
+              {mpPlatform !== "All" && jobTypesFor(mpPlatform).length > 0 && (
+                <div className="mb-5 flex flex-wrap gap-1.5">
+                  {["Semua", ...jobTypesFor(mpPlatform)].map((t) => (
+                    <button key={t} onClick={() => setMpJobType(t)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${mpJobType === t ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "border border-slate-200 bg-white/70 text-slate-500 hover:bg-white dark:border-white/10 dark:bg-white/5"}`}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
               {shownJobs.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">No {mpPlatform !== "All" ? mpPlatform : ""} jobs right now. Check back soon 🙌</p> : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {shownJobs.map((j) => (
@@ -449,7 +462,7 @@ export default function Dashboard() {
                         </span>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10">Available</span>
                       </div>
-                      <p className="mt-3 text-[11px] font-semibold text-slate-400">#{j.id}</p>
+                      <p className="mt-3 text-[11px] font-semibold text-slate-400">#{j.id}{j.job_type && <span className="ml-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-brand-600 dark:bg-brand-500/10">{j.job_type}</span>}</p>
                       <h3 className="mt-0.5 line-clamp-2 font-bold leading-snug">{j.title}</h3>
                       {j.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{j.description}</p>}
                       <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300">
@@ -482,7 +495,7 @@ export default function Dashboard() {
                       </span>
                       <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10">Available</span>
                     </div>
-                    <p className="mt-3 text-xs font-semibold text-slate-400">#{jobDetail.id} · by {jobDetail.vendor_name}</p>
+                    <p className="mt-3 text-xs font-semibold text-slate-400">#{jobDetail.id}{jobDetail.job_type && <span className="ml-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-brand-600 dark:bg-brand-500/10">{jobDetail.job_type}</span>} · by {jobDetail.vendor_name}</p>
                     <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">{jobDetail.title}</h1>
                     {jobDetail.target_url && (
                       <a href={jobDetail.target_url} target="_blank" className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-50 px-4 py-2 text-sm font-bold text-brand-600 transition hover:bg-brand-100 dark:bg-brand-500/10">

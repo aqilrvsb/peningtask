@@ -7,10 +7,11 @@ import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
 import { formatDuration, klISO } from "@/lib/duration";
+import { jobTypesFor } from "@/lib/jobtypes";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Campaign = {
-  id: number; platform: string; title: string | null; quantity: number; delivered: number;
+  id: number; platform: string; job_type: string | null; title: string | null; quantity: number; delivered: number;
   reward_each: number; fee_pct: number; deadline: string | null; starts_at: string | null; all_day: boolean; expired: boolean;
   invoice: number; invoice_fee: number; invoice_total: number;
   payment_status: string; receipt_url: string | null; admin_reject_reason: string | null; created_at: string;
@@ -53,6 +54,7 @@ export default function VendorPanel() {
 
   // create-job form
   const [platform, setPlatform] = useState("TikTok");
+  const [jobType, setJobType] = useState("Combo");
   const [jobName, setJobName] = useState("");
   const [reward, setReward] = useState(0.1);
   const [count, setCount] = useState(20);
@@ -130,7 +132,7 @@ export default function VendorPanel() {
       exampleUrls.push(supabase.storage.from("examples").getPublicUrl(path).data.publicUrl);
     }
     const { error } = await supabase.rpc("vendor_create_job", {
-      p_platform: platform, p_title: jobName, p_reward: reward, p_quota: count,
+      p_platform: platform, p_job_type: jobType, p_title: jobName, p_reward: reward, p_quota: count,
       p_evidence_type: evidenceType, p_claim_mode: claimMode,
       p_per_user_quota: claimMode === "multi" ? perUserQuota : 1,
       p_duration_min: durationMin || null,
@@ -319,8 +321,14 @@ export default function VendorPanel() {
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium">Platform *</label>
-                  <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5">
+                  <select value={platform} onChange={(e) => { setPlatform(e.target.value); setJobType(jobTypesFor(e.target.value)[0] ?? ""); }} className="mt-1 w-full rounded-xl px-4 py-2.5">
                     {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Jenis Job *</label>
+                  <select value={jobType} onChange={(e) => setJobType(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5">
+                    {jobTypesFor(platform).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
@@ -482,7 +490,10 @@ export default function VendorPanel() {
                   <tbody>
                     {campaigns.filter((c) => !c.expired).map((c) => (
                       <tr key={c.id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
-                        <td className="max-w-[220px] truncate px-5 py-3.5 font-semibold">{c.title || `Job #${c.id}`}</td>
+                        <td className="max-w-[220px] px-5 py-3.5">
+                          <p className="truncate font-semibold">{c.title || `Job #${c.id}`}</p>
+                          {c.job_type && <span className="mt-0.5 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-600 dark:bg-brand-500/10">{c.job_type}</span>}
+                        </td>
                         <td className="px-5 py-3.5"><span className="flex w-fit items-center gap-1.5">{ICON_KEY[c.platform] && <PlatformIcon name={ICON_KEY[c.platform]} size={22} />}{c.platform}</span></td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
