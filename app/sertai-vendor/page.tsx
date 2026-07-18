@@ -108,7 +108,7 @@ export default function SertaiVendor() {
           <div>
             <div className="overflow-hidden rounded-3xl border border-white/60 shadow-card ring-1 ring-brand-200/50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/vendor-hero.png" alt="Grow your business with PeningJob" className="w-full" />
+              <img src="/vendor-hero.webp" alt="Grow your business with PeningJob" className="w-full" />
             </div>
           <div className="pj-card mt-5 p-8 shadow-card">
             <h2 className="text-xl font-bold">How it works</h2>

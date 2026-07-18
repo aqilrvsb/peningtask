@@ -65,6 +65,9 @@ export default function Admin() {
   const [busy, setBusy] = useState(false);
   const toggleProof = (p: string) => setProofTypes((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
 
+  const [dailyFees, setDailyFees] = useState<{ day: string; total: number }[]>([]);
+  const [outstanding, setOutstanding] = useState(0);
+
   // vendor payments + fee
   const [payments, setPayments] = useState<Row[]>([]);
   const [feePct, setFeePct] = useState("20");
@@ -131,13 +134,17 @@ export default function Admin() {
     const { data: prof } = await supabase.from("profiles").select("role").eq("id", auth.user.id).single();
     if (prof?.role !== "admin") { setOk(false); return; }
     setOk(true);
-    const [st, pf, sms] = await Promise.all([
+    const [st, pf, sms, df, os] = await Promise.all([
       supabase.rpc("admin_stats"),
       supabase.rpc("platform_stats"),
       supabase.rpc("admin_get_sms_config"),
+      supabase.rpc("admin_daily_fees"),
+      supabase.rpc("admin_outstanding"),
     ]);
     setStats((st.data as Stats) ?? null);
     setPlat((Array.isArray(pf.data) ? pf.data[0] : pf.data) as Plat);
+    setDailyFees((df.data as { day: string; total: number }[]) ?? []);
+    setOutstanding(typeof os.data === "number" ? os.data : 0);
     const s = Array.isArray(sms.data) ? sms.data[0] : sms.data;
     if (s) { setSmsKey(s.app_key ?? ""); setSmsSecret(s.app_secret ?? ""); setSmsSender(s.sender ?? "PeningJob"); }
   }, [supabase]);
@@ -304,10 +311,31 @@ export default function Admin() {
                   </div>
                 ))}
               </div>
-              <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
-                <p className="text-sm text-white/80">💰 Pendapatan Platform (fee terkumpul)</p>
-                <p className="mt-1 text-4xl font-extrabold">{rm(plat?.total_fees)}</p>
-                <p className="mt-1 text-sm text-white/80">Escrow dipegang: {rm(plat?.escrow_held)}</p>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
+                  <p className="text-sm text-white/80">💰 Pendapatan Platform (fee dibayar)</p>
+                  <p className="mt-1 text-4xl font-extrabold">{rm(plat?.total_fees)}</p>
+                  <p className="mt-1 text-sm text-white/80">Escrow dipegang: {rm(plat?.escrow_held)}</p>
+                </div>
+                <div className="pj-card p-5">
+                  <p className="text-xs font-semibold text-slate-500">🧾 Invois Vendor Belum Bayar</p>
+                  <p className="mt-1 text-2xl font-extrabold text-amber-600">{rm(outstanding)}</p>
+                  <p className="mt-1 text-xs text-slate-400">Tunggak dari job luput</p>
+                </div>
+                <div className="pj-card p-5 lg:col-span-1">
+                  <p className="text-xs font-semibold text-slate-500">Fee Harian · 14 hari</p>
+                  <p className="mt-1 text-lg font-extrabold text-gradient">{rm(dailyFees.reduce((a, d) => a + Number(d.total), 0))}</p>
+                  {(() => { const mx = Math.max(0.01, ...dailyFees.map((d) => Number(d.total))); return (
+                    <div className="mt-3 flex h-16 items-end gap-[3px]">
+                      {dailyFees.map((d) => (
+                        <div key={d.day} className="group relative flex-1">
+                          <div className="w-full rounded-t bg-brand-500/90 transition group-hover:bg-brand-600" style={{ height: `${Math.max(2, (Number(d.total) / mx) * 58)}px` }} />
+                          <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white group-hover:block dark:bg-white dark:text-slate-900">{d.day} · {rm(d.total)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ); })()}
+                </div>
               </div>
             </div>
           )}

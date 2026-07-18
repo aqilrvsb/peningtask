@@ -15,19 +15,19 @@ const STEPS = [
     n: "1",
     title: "Daftar & Pilih Tugasan",
     body: "Daftar percuma dengan pengesahan TAC, kemudian pilih tugasan ringkas — follow, like atau komen — yang anda suka.",
-    img: "/step1.png",
+    img: "/step1.webp",
   },
   {
     n: "2",
     title: "Siapkan & Hantar Bukti",
     body: "Selesaikan tugasan dalam beberapa minit, muat naik bukti (gambar/video/link), dan hantar untuk semakan.",
-    img: "/step2.png",
+    img: "/step2.webp",
   },
   {
     n: "3",
     title: "Dapat Ganjaran & Withdraw",
     body: "Ganjaran masuk terus ke wallet anda selepas disahkan. Kumpul XP, naik level, dan withdraw ke bank bila-bila masa.",
-    img: "/step3.png",
+    img: "/step3.webp",
   },
 ];
 
@@ -173,7 +173,7 @@ export default function Home() {
               <div className="pointer-events-none absolute -inset-8 -z-10 bg-brand-400/20 blur-3xl" />
               <video
                 src="/hero.mp4"
-                poster="/hero.png"
+                poster="/hero.webp"
                 autoPlay
                 muted
                 loop
@@ -256,9 +256,9 @@ export default function Home() {
         </div>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {[
-            { img: "/cara1.png", tag: "Ganjaran Terus", title: "Buat Tugasan", body: "Selesaikan tugasan ringkas ikut masa lapang anda dan kumpul ganjaran tunai terus ke wallet.", href: "/daftar", cta: "Daftar & Mula" },
-            { img: "/cara2.png", tag: "Gamifikasi", title: "Naik Level & Leaderboard", body: "Setiap tugasan beri XP. Naik level, panjat leaderboard, dan tunjuk pencapaian anda.", href: "/leaderboard", cta: "Lihat Leaderboard" },
-            { img: "/cara3.png", tag: "10% Komisyen", title: "Jemput Rakan", body: "Kongsi link anda — dapat RM0.10 setiap rakan daftar + komisyen berterusan.", href: "/daftar", cta: "Daftar Sekarang" },
+            { img: "/cara1.webp", tag: "Ganjaran Terus", title: "Buat Tugasan", body: "Selesaikan tugasan ringkas ikut masa lapang anda dan kumpul ganjaran tunai terus ke wallet.", href: "/daftar", cta: "Daftar & Mula" },
+            { img: "/cara2.webp", tag: "Gamifikasi", title: "Naik Level & Leaderboard", body: "Setiap tugasan beri XP. Naik level, panjat leaderboard, dan tunjuk pencapaian anda.", href: "/leaderboard", cta: "Lihat Leaderboard" },
+            { img: "/cara3.webp", tag: "10% Komisyen", title: "Jemput Rakan", body: "Kongsi link anda — dapat RM0.10 setiap rakan daftar + komisyen berterusan.", href: "/daftar", cta: "Daftar Sekarang" },
           ].map((c) => (
             <FeatureCard key={c.title} img={c.img} tag={c.tag} title={c.title} body={c.body} href={c.href} cta={c.cta} />
           ))}
@@ -276,10 +276,10 @@ export default function Home() {
         </div>
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { img: "/kisah1.png", who: "Pelajar", body: "Tukar masa scroll antara kelas jadi duit poket. Tiada modal, buat ikut masa lapang." },
-            { img: "/kisah2.png", who: "Suri Rumah", body: "Jana pendapatan dari rumah sambil uruskan keluarga — beberapa minit sehari sudah memadai." },
-            { img: "/kisah3.png", who: "Pekerja Part-time", body: "Income tambahan waktu malam & hujung minggu, terus masuk wallet dan withdraw ke bank." },
-            { img: "/kisah4.png", who: "Peminat Sosial", body: "Kenali cara engagement organik berfungsi dari dalam — sambil dibayar untuk masa anda." },
+            { img: "/kisah1.webp", who: "Pelajar", body: "Tukar masa scroll antara kelas jadi duit poket. Tiada modal, buat ikut masa lapang." },
+            { img: "/kisah2.webp", who: "Suri Rumah", body: "Jana pendapatan dari rumah sambil uruskan keluarga — beberapa minit sehari sudah memadai." },
+            { img: "/kisah3.webp", who: "Pekerja Part-time", body: "Income tambahan waktu malam & hujung minggu, terus masuk wallet dan withdraw ke bank." },
+            { img: "/kisah4.webp", who: "Peminat Sosial", body: "Kenali cara engagement organik berfungsi dari dalam — sambil dibayar untuk masa anda." },
           ].map((s) => (
             <FeatureCard key={s.who} img={s.img} title={s.who} body={s.body} />
           ))}

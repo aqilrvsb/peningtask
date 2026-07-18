@@ -59,6 +59,7 @@ export default function VendorPanel() {
   const [evidenceType, setEvidenceType] = useState<"image" | "video">("image");
   const [claimMode, setClaimMode] = useState<"once" | "multi">("once");
   const [perUserQuota, setPerUserQuota] = useState(2);
+  const [autoRelease, setAutoRelease] = useState(6);
   const [instructions, setInstructions] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [exampleFiles, setExampleFiles] = useState<File[]>([]);
@@ -80,6 +81,7 @@ export default function VendorPanel() {
     setAllowed(true);
     setBizName(prof.business_name ?? "");
     setLogoUrl(prof.avatar_url ?? null);
+    await supabase.rpc("release_abandoned");
     const [c, s, fp] = await Promise.all([
       supabase.rpc("vendor_my_jobs"),
       supabase.rpc("vendor_pending_submissions"),
@@ -115,6 +117,7 @@ export default function VendorPanel() {
       p_duration_min: durationMin || null,
       p_deadline: new Date(deadline).toISOString(),
       p_instructions: instructions, p_target_url: targetUrl || null, p_example_urls: exampleUrls,
+      p_auto_release_hours: autoRelease,
     });
     setBusy(false);
     if (error) return flash("❌ " + error.message);
@@ -324,6 +327,10 @@ export default function VendorPanel() {
                   <input type="number" min="2" value={perUserQuota} onChange={(e) => setPerUserQuota(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" />
                 </div>
               )}
+              <label className="mt-4 block text-sm font-medium">Auto-release slot after (hours)</label>
+              <input type="number" min="1" value={autoRelease} onChange={(e) => setAutoRelease(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+              <p className="mt-1 text-xs text-slate-400">If a worker takes a slot but doesn&apos;t submit proof within this time, the slot returns to the marketplace.</p>
+
               <label className="mt-4 block text-sm font-medium">Job Link (target URL)</label>
               <input value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} placeholder="https://www.tiktok.com/@your_account" className="mt-1 w-full rounded-xl px-4 py-2.5" />
               <label className="mt-4 block text-sm font-medium">Instructions *</label>

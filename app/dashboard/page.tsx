@@ -109,6 +109,7 @@ export default function Dashboard() {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { window.location.href = "/log-masuk"; return; }
     const uid = auth.user.id;
+    await supabase.rpc("release_abandoned"); // free abandoned slots before showing jobs
     const [p, mj, jb, w, wd, nf, ws] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", uid).single(),
       supabase.rpc("client_my_jobs"),
