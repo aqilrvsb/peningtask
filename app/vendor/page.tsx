@@ -130,6 +130,7 @@ export default function VendorPanel() {
 
   async function createJob() {
     if (!supabase) return;
+    if (!brandComplete) { setSection("brand"); return flash("⚠️ Set your vendor name & logo first"); }
     if (!jobName.trim()) return flash("⚠️ Enter the job name");
     if (jobTypes.length === 0) return flash("⚠️ Tick at least one Jenis Job");
     if (!instructions.trim()) return flash("⚠️ Write the job instructions");
@@ -224,6 +225,7 @@ export default function VendorPanel() {
   }
 
   const dueCount = campaigns.filter((c) => c.expired && c.delivered > 0 && c.payment_status !== "paid").length;
+  const brandComplete = !!bizName.trim() && !!logoUrl;
   const subsPending = allSubs.filter((s) => s.status === "accepted");
   const subsProcess = allSubs.filter((s) => s.status === "pending");
   const subsSuccess = allSubs.filter((s) => s.status === "approved");
@@ -406,9 +408,23 @@ export default function VendorPanel() {
             </div>
           )}
 
-          {section === "create" && (
-            <div className="pj-card max-w-2xl p-6">
+          {section === "create" && !brandComplete && (
+            <div className="pj-card mx-auto max-w-xl p-8 text-center">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-amber-100 text-3xl dark:bg-amber-500/15">🏷️</div>
+              <h2 className="mt-4 text-xl font-extrabold">Complete your brand first</h2>
+              <p className="mt-2 text-sm text-slate-500">Before you can create a job, set your <b>vendor name</b> and upload your <b>logo</b>. Your brand appears on every job so community members trust it.</p>
+              <div className="mt-3 flex justify-center gap-2 text-sm">
+                <span className={`rounded-full px-3 py-1 font-semibold ${bizName.trim() ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-slate-100 text-slate-400 dark:bg-white/10"}`}>{bizName.trim() ? "✓" : "○"} Name</span>
+                <span className={`rounded-full px-3 py-1 font-semibold ${logoUrl ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-slate-100 text-slate-400 dark:bg-white/10"}`}>{logoUrl ? "✓" : "○"} Logo</span>
+              </div>
+              <button onClick={() => setSection("brand")} className="pj-btn-primary mt-5 px-6 py-2.5">Set up my Brand →</button>
+            </div>
+          )}
+          {section === "create" && brandComplete && (
+            <div className="pj-card p-6">
               <h2 className="text-lg font-semibold">Create New Job</h2>
+              <div className="mt-2 grid gap-x-8 lg:grid-cols-2">
+              <div>
               <label className="mt-4 block text-sm font-medium">Job Name *</label>
               <input value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Follow account & like 3 latest posts" className="mt-1 w-full rounded-xl px-4 py-2.5" />
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -492,6 +508,8 @@ export default function VendorPanel() {
                 </div>
               )}
               <p className="mt-1 text-xs text-slate-400">After the end date the job leaves the marketplace and an invoice is generated for the work delivered.</p>
+              </div>
+              <div>
               <label className="mt-4 block text-sm font-medium">Evidence Type *</label>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 {([["image", "📷 By Images"], ["video", "🎬 By Video URL"]] as const).map(([k, l]) => (
@@ -552,6 +570,8 @@ export default function VendorPanel() {
               <button onClick={createJob} disabled={busy} className="pj-btn-primary mt-4 w-full py-3">
                 {busy ? "Publishing…" : "Publish Job (free — pay after expiry)"}
               </button>
+              </div>
+              </div>
             </div>
           )}
 
