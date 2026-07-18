@@ -18,7 +18,7 @@ type Profile = {
   url_youtube: string | null; url_tiktok: string | null;
 };
 type Job = {
-  id: number; platform: string; job_type: string | null; title: string; description: string | null; reward: number;
+  id: number; platform: string; job_type: string | null; job_types: string[] | null; title: string; description: string | null; reward: number;
   quota: number; taken: number; duration_min: number | null; evidence_type: string;
   claim_mode: string; per_user_quota: number; deadline: string | null; target_url: string | null;
   starts_at: string | null; all_day: boolean;
@@ -210,7 +210,7 @@ export default function Dashboard() {
 
   const shownJobs = jobs
     .filter((j) => mpPlatform === "All" || j.platform === mpPlatform)
-    .filter((j) => mpJobType === "Semua" || j.job_type === mpJobType);
+    .filter((j) => mpJobType === "Semua" || j.job_type === mpJobType || (j.job_types?.includes(mpJobType) ?? false));
 
   // 14-day earnings series (positive txns grouped by day)
   const earnSeries = useMemo(() => {

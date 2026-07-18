@@ -11,7 +11,7 @@ import { jobTypesFor } from "@/lib/jobtypes";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Campaign = {
-  id: number; platform: string; job_type: string | null; title: string | null; quantity: number; delivered: number;
+  id: number; platform: string; job_type: string | null; job_types: string[] | null; title: string | null; quantity: number; delivered: number;
   reward_each: number; fee_pct: number; deadline: string | null; starts_at: string | null; all_day: boolean; expired: boolean;
   invoice: number; invoice_fee: number; invoice_total: number;
   payment_status: string; receipt_url: string | null; admin_reject_reason: string | null; created_at: string;
@@ -54,7 +54,7 @@ export default function VendorPanel() {
 
   // create-job form
   const [platform, setPlatform] = useState("TikTok");
-  const [jobType, setJobType] = useState("Combo");
+  const [jobTypes, setJobTypes] = useState<string[]>([]);
   const [jobName, setJobName] = useState("");
   const [reward, setReward] = useState(0.1);
   const [count, setCount] = useState(20);
@@ -108,6 +108,7 @@ export default function VendorPanel() {
   async function createJob() {
     if (!supabase) return;
     if (!jobName.trim()) return flash("⚠️ Enter the job name");
+    if (jobTypes.length === 0) return flash("⚠️ Tick at least one Jenis Job");
     if (!instructions.trim()) return flash("⚠️ Write the job instructions");
     // --- duration (Kuala Lumpur) ---
     if (!startDate) return flash(dateMode === "range" ? "⚠️ Set the start date" : "⚠️ Set the job date");
@@ -132,7 +133,7 @@ export default function VendorPanel() {
       exampleUrls.push(supabase.storage.from("examples").getPublicUrl(path).data.publicUrl);
     }
     const { error } = await supabase.rpc("vendor_create_job", {
-      p_platform: platform, p_job_type: jobType, p_title: jobName, p_reward: reward, p_quota: count,
+      p_platform: platform, p_job_types: jobTypes, p_title: jobName, p_reward: reward, p_quota: count,
       p_evidence_type: evidenceType, p_claim_mode: claimMode,
       p_per_user_quota: claimMode === "multi" ? perUserQuota : 1,
       p_duration_min: durationMin || null,
@@ -144,7 +145,7 @@ export default function VendorPanel() {
     setBusy(false);
     if (error) return flash("❌ " + error.message);
     flash("✅ Job is now live on the marketplace!");
-    setJobName(""); setInstructions(""); setTargetUrl(""); setExampleFiles([]); setStartDate(""); setEndDate("");
+    setJobName(""); setInstructions(""); setTargetUrl(""); setExampleFiles([]); setStartDate(""); setEndDate(""); setJobTypes([]);
     load(); setSection("jobs");
   }
 
@@ -321,14 +322,8 @@ export default function VendorPanel() {
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium">Platform *</label>
-                  <select value={platform} onChange={(e) => { setPlatform(e.target.value); setJobType(jobTypesFor(e.target.value)[0] ?? ""); }} className="mt-1 w-full rounded-xl px-4 py-2.5">
+                  <select value={platform} onChange={(e) => { setPlatform(e.target.value); setJobTypes([]); }} className="mt-1 w-full rounded-xl px-4 py-2.5">
                     {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Jenis Job *</label>
-                  <select value={jobType} onChange={(e) => setJobType(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5">
-                    {jobTypesFor(platform).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
@@ -344,6 +339,24 @@ export default function VendorPanel() {
                   <input type="number" min="1" value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" />
                 </div>
               </div>
+              <div className="mt-4 flex items-center justify-between">
+                <label className="block text-sm font-medium">Jenis Job * <span className="font-normal text-slate-400">(tick 1 or more)</span></label>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${jobTypes.length >= 2 ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "bg-slate-100 text-slate-500 dark:bg-white/10"}`}>
+                  {jobTypes.length === 0 ? "None selected" : jobTypes.length === 1 ? jobTypes[0] : `Combo · ${jobTypes.length} selected`}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {jobTypesFor(platform).filter((t) => t !== "Combo").map((t) => {
+                  const on = jobTypes.includes(t);
+                  return (
+                    <button type="button" key={t} onClick={() => setJobTypes((cur) => on ? cur.filter((x) => x !== t) : [...cur, t])}
+                      className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition ${on ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300" : "border-slate-200 text-slate-600 hover:border-slate-300 dark:border-white/10 dark:text-slate-300"}`}>
+                      <span className={`grid h-4 w-4 place-items-center rounded border ${on ? "border-brand-500 bg-brand-500 text-white" : "border-slate-300 dark:border-white/20"}`}>{on ? "✓" : ""}</span>{t}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-xs text-slate-400">Tick one type for a single job, or two or more to bundle them as a <b>Combo</b>.</p>
               <div className="mt-4 flex items-center justify-between">
                 <label className="block text-sm font-medium">Duration *</label>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-white/10">🕐 Timezone: Kuala Lumpur (GMT+8)</span>
