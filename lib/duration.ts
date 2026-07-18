@@ -20,6 +20,21 @@ export function formatDuration(startISO?: string | null, endISO?: string | null,
   return `${datePart} · ${klTime(start)}–${klTime(end)}`;
 }
 
+// Date part only, e.g. "20 Jul 2026" or "20 – 25 Jul 2026".
+export function formatDateRange(startISO?: string | null, endISO?: string | null): string {
+  const s = startISO ? new Date(startISO) : null;
+  const e = endISO ? new Date(endISO) : null;
+  if ((!s || isNaN(s.getTime())) && (!e || isNaN(e.getTime()))) return "—";
+  if (s && e && !isNaN(s.getTime()) && !isNaN(e.getTime())) return klDay(s) === klDay(e) ? klDate(s) : `${klDate(s)} – ${klDate(e)}`;
+  return klDate((s && !isNaN(s.getTime()) ? s : e) as Date);
+}
+
+// Time part only, e.g. "All day" or "2:00 PM–6:00 PM".
+export function formatTimeRange(startISO?: string | null, endISO?: string | null, allDay?: boolean | null): string {
+  if (allDay || !startISO || !endISO) return "All day";
+  return `${klTime(new Date(startISO))}–${klTime(new Date(endISO))}`;
+}
+
 // Build a KL-timezone ISO instant from a yyyy-mm-dd date + HH:MM time (GMT+8, no DST).
 export function klISO(date: string, time: string): string {
   return new Date(`${date}T${time}:00+08:00`).toISOString();

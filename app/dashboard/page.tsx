@@ -5,7 +5,7 @@ import { Logo } from "@/components/site";
 import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
-import { formatDuration } from "@/lib/duration";
+import { formatDuration, formatDateRange, formatTimeRange } from "@/lib/duration";
 import { jobTypesFor } from "@/lib/jobtypes";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
@@ -461,16 +461,23 @@ export default function Dashboard() {
                         </span>
                         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10">Available</span>
                       </div>
-                      <p className="mt-3 text-[11px] font-semibold text-slate-400">#{j.id}{j.job_type && <span className="ml-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-brand-600 dark:bg-brand-500/10">{j.job_type}</span>}</p>
-                      <h3 className="mt-0.5 line-clamp-2 font-bold leading-snug">{j.title}</h3>
-                      {j.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{j.description}</p>}
-                      <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300">
-                        <span>💰 <b className="text-gradient">{rm(j.reward)}</b></span>
-                        <span>⏱️ {j.duration_min ? `${j.duration_min} min` : "—"}</span>
+                      {/* 1) Title */}
+                      <h3 className="mt-3 line-clamp-2 font-bold leading-snug">{j.title}</h3>
+                      {/* 2) Jenis Job */}
+                      {j.job_type && <div className="mt-1"><span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold text-brand-600 dark:bg-brand-500/10">{j.job_type}</span></div>}
+                      {/* 3) Date range · 4) Time */}
+                      <div className="mt-2 space-y-1 text-xs text-slate-500">
+                        <p>📅 {formatDateRange(j.starts_at, j.deadline)}</p>
+                        <p>🕐 {formatTimeRange(j.starts_at, j.deadline, j.all_day)}</p>
+                      </div>
+                      {/* 5) Job details */}
+                      {j.description && <p className="mt-2 line-clamp-2 text-sm text-slate-500">{j.description}</p>}
+                      {/* 6) Slot · Amount · Jenis Bukti */}
+                      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300">
                         <span>👥 Slot: {j.taken}/{j.quota}</span>
+                        <span>💰 <b className="text-gradient">{rm(j.reward)}</b></span>
                         <span>{j.evidence_type === "video" ? "🎬 Video" : "📷 Image"}</span>
                       </div>
-                      <p className="mt-2 text-xs text-slate-400">📆 {formatDuration(j.starts_at, j.deadline, j.all_day)}</p>
                       <div className="mt-4 grid grid-cols-2 gap-2">
                         <button onClick={() => setJobDetail(j)} className="pj-btn-ghost py-2.5">View Details</button>
                         <button onClick={() => acceptJob(j)} className="pj-btn-primary py-2.5">Take Job</button>

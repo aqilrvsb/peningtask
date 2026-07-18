@@ -6,7 +6,7 @@ import { Logo } from "@/components/site";
 import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
-import { formatDuration, klISO } from "@/lib/duration";
+import { formatDuration, formatDateRange, formatTimeRange, klISO } from "@/lib/duration";
 import { jobTypesFor } from "@/lib/jobtypes";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
@@ -17,16 +17,31 @@ type Campaign = {
   payment_status: string; receipt_url: string | null; admin_reject_reason: string | null; created_at: string;
 };
 type Sub = {
-  id: number; task_id: number; job_title: string; platform: string; reward: number;
+  id: number; task_id: number; job_title: string; platform: string; reward: number; status: string;
   client_name: string | null; client_profile_url: string | null; description: string | null;
-  proof_urls: string[] | null; evidence_type: string; created_at: string;
+  proof_urls: string[] | null; evidence_type: string; reject_reason: string | null; created_at: string;
+};
+type Mk = {
+  id: number; platform: string; job_type: string | null; title: string; description: string | null;
+  reward: number; quota: number; taken: number; duration_min: number | null; evidence_type: string;
+  deadline: string | null; starts_at: string | null; all_day: boolean; vendor_name: string | null;
+};
+type ClientReport = {
+  client_id: string; client_name: string; client_whatsapp: string | null;
+  total_jobs: number; total_pending: number; total_process: number; total_success: number;
+  total_failed: number; total_commission: number;
 };
 
 const NAV = [
   { key: "dashboard", icon: "📊", label: "Dashboard" },
+  { key: "marketplace", icon: "🛒", label: "Marketplace" },
   { key: "create", icon: "➕", label: "Create Job" },
-  { key: "review", icon: "🔍", label: "Review Submissions" },
+  { key: "pending", icon: "⏳", label: "Job Pending" },
+  { key: "process", icon: "🔄", label: "Job Process" },
+  { key: "success", icon: "✅", label: "Job Success" },
+  { key: "rejected", icon: "❌", label: "Job Rejected" },
   { key: "jobs", icon: "📋", label: "My Jobs" },
+  { key: "clients", icon: "📈", label: "Client Report" },
   { key: "support", icon: "🎫", label: "Support" },
   { key: "brand", icon: "🏷️", label: "Brand" },
 ];
@@ -44,7 +59,11 @@ export default function VendorPanel() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [subs, setSubs] = useState<Sub[]>([]);
+  const [allSubs, setAllSubs] = useState<Sub[]>([]);
+  const [mkJobs, setMkJobs] = useState<Mk[]>([]);
+  const [clientReport, setClientReport] = useState<ClientReport[]>([]);
+  const [mpPlatform, setMpPlatform] = useState("All");
+  const [mpJobType, setMpJobType] = useState("Semua");
 
   // brand
   const [bizName, setBizName] = useState("");
@@ -91,14 +110,18 @@ export default function VendorPanel() {
     setAllowed(true);
     setBizName(prof.business_name ?? "");
     setLogoUrl(prof.avatar_url ?? null);
-    const [c, s, fp] = await Promise.all([
+    const [c, s, fp, mk, cr] = await Promise.all([
       supabase.rpc("vendor_my_jobs"),
-      supabase.rpc("vendor_pending_submissions"),
+      supabase.rpc("vendor_submissions"),
       supabase.rpc("get_fee_pct"),
+      supabase.rpc("marketplace_preview"),
+      supabase.rpc("vendor_client_report"),
     ]);
     setCampaigns((c.data as Campaign[]) ?? []);
-    setSubs((s.data as Sub[]) ?? []);
+    setAllSubs((s.data as Sub[]) ?? []);
     if (typeof fp.data === "number") setFeePct(fp.data);
+    setMkJobs((mk.data as Mk[]) ?? []);
+    setClientReport((cr.data as ClientReport[]) ?? []);
   }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
@@ -199,7 +222,64 @@ export default function VendorPanel() {
   }
 
   const dueCount = campaigns.filter((c) => c.expired && c.delivered > 0 && c.payment_status !== "paid").length;
+  const subsPending = allSubs.filter((s) => s.status === "accepted");
+  const subsProcess = allSubs.filter((s) => s.status === "pending");
+  const subsSuccess = allSubs.filter((s) => s.status === "approved");
+  const subsRejected = allSubs.filter((s) => s.status === "rejected");
+  const mkShown = mkJobs
+    .filter((j) => mpPlatform === "All" || j.platform === mpPlatform)
+    .filter((j) => mpJobType === "Semua" || j.job_type === mpJobType);
   const activeLabel = NAV.find((n) => n.key === section)?.label ?? "";
+
+  const STATUS_PILL: Record<string, { t: string; c: string }> = {
+    accepted: { t: "⏳ Awaiting submission", c: "bg-slate-100 text-slate-500 dark:bg-white/10" },
+    pending: { t: "🔄 In review", c: "bg-amber-50 text-amber-600 dark:bg-amber-500/10" },
+    approved: { t: "✅ Success · paid", c: "bg-brand-50 text-brand-600 dark:bg-brand-500/10" },
+    rejected: { t: "❌ Rejected", c: "bg-rose-50 text-rose-600 dark:bg-rose-500/10" },
+  };
+  const subCard = (s: Sub, actions: boolean) => (
+    <div key={s.id} className="pj-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {ICON_KEY[s.platform] && <PlatformIcon name={ICON_KEY[s.platform]} size={32} />}
+            <div>
+              <p className="font-bold">{s.job_title}</p>
+              <p className="text-xs text-slate-500">Reward {rm(s.reward)} · {new Date(s.created_at).toLocaleString("en-MY")}</p>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm dark:bg-white/5">
+            <p><b>👤 {s.client_name || "Client"}</b>{s.client_profile_url && <> · <a href={s.client_profile_url} target="_blank" className="font-semibold text-brand-600 hover:underline">Verify {s.platform} profile ↗</a></>}</p>
+            {s.description && <p className="mt-1.5 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{s.description}</p>}
+          </div>
+          {(s.proof_urls?.length ?? 0) > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {s.proof_urls!.map((u, i) =>
+                s.evidence_type === "video" || (!/\.(jpe?g|png|webp|gif)($|\?)/i.test(u) && u.startsWith("http") && !u.includes("/storage/")) ? (
+                  <a key={i} href={u} target="_blank" className="rounded-xl bg-brand-50 px-4 py-2 text-sm font-bold text-brand-600 hover:bg-brand-100 dark:bg-brand-500/10">▶ Watch video proof ↗</a>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <a key={i} href={u} target="_blank"><img src={u} alt={`Proof ${i + 1}`} className="h-36 rounded-xl border border-slate-200 object-cover dark:border-white/10" /></a>
+                )
+              )}
+            </div>
+          )}
+          {s.status === "rejected" && s.reject_reason && <p className="mt-2 text-sm text-rose-600">Reason: {s.reject_reason}</p>}
+        </div>
+        {actions ? (
+          <div className="flex gap-2">
+            <button onClick={() => decide(s.id, true)} className="pj-btn-primary px-4 py-2">Approve &amp; Pay</button>
+            <button onClick={() => decide(s.id, false)} className="pj-btn-ghost px-4 py-2">Reject</button>
+          </div>
+        ) : (
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_PILL[s.status]?.c ?? "bg-slate-100"}`}>{STATUS_PILL[s.status]?.t ?? s.status}</span>
+        )}
+      </div>
+    </div>
+  );
+  const subList = (list: Sub[], actions: boolean, empty: string) => (
+    <div className="space-y-3">{list.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">{empty}</p> : list.map((s) => subCard(s, actions))}</div>
+  );
 
   if (pending)
     return (
@@ -256,11 +336,10 @@ export default function VendorPanel() {
               <button key={it.key} onClick={() => { setSection(it.key); setNavOpen(false); }}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${section === it.key ? "bg-brand-gradient text-white shadow-glow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"}`}>
                 <span className="text-base">{it.icon}</span>{it.label}
-                {it.key === "review" && subs.length > 0 && <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{subs.length}</span>}
+                {it.key === "process" && subsProcess.length > 0 && <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{subsProcess.length}</span>}
               </button>
             ))}
           </nav>
-          <Link href="/dashboard" className="mt-6 block rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">← Client Dashboard</Link>
         </div>
       </aside>
 
@@ -286,7 +365,7 @@ export default function VendorPanel() {
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 {[
                   { l: "Active Jobs", v: campaigns.filter((c) => !c.expired).length, icon: "📋" },
-                  { l: "Pending Review", v: subs.length, icon: "🔍", hot: subs.length > 0 },
+                  { l: "Pending Review", v: subsProcess.length, icon: "🔍", hot: subsProcess.length > 0 },
                   { l: "Payment Due", v: dueCount, icon: "🧾", hot: dueCount > 0 },
                   { l: "Fee Rate", v: `${feePct}%`, icon: "⚙️" },
                 ].map((s) => (
@@ -306,7 +385,7 @@ export default function VendorPanel() {
                 </ol>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button onClick={() => setSection("create")} className="pj-btn-primary px-5 py-2.5">+ Create Job</button>
-                  <button onClick={() => setSection("review")} className="pj-btn-ghost px-5 py-2.5">🔍 Review ({subs.length})</button>
+                  <button onClick={() => setSection("process")} className="pj-btn-ghost px-5 py-2.5">🔍 Review ({subsProcess.length})</button>
                 </div>
               </div>
             </div>
@@ -461,44 +540,97 @@ export default function VendorPanel() {
             </div>
           )}
 
-          {section === "review" && (
+          {section === "pending" && subList(subsPending, false, "No clients have taken a job yet ⏳")}
+          {section === "process" && (
             <div className="space-y-3">
-              {subs.length === 0 && <p className="pj-card p-12 text-center text-slate-400">No proofs awaiting review ✅</p>}
-              {subs.map((s) => (
-                <div key={s.id} className="pj-card p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        {ICON_KEY[s.platform] && <PlatformIcon name={ICON_KEY[s.platform]} size={32} />}
-                        <div>
-                          <p className="font-bold">{s.job_title}</p>
-                          <p className="text-xs text-slate-500">Reward {rm(s.reward)} · {new Date(s.created_at).toLocaleString("en-MY")}</p>
-                        </div>
-                      </div>
-                      <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm dark:bg-white/5">
-                        <p><b>👤 {s.client_name || "Client"}</b>{s.client_profile_url && <> · <a href={s.client_profile_url} target="_blank" className="font-semibold text-brand-600 hover:underline">Verify {s.platform} profile ↗</a></>}</p>
-                        {s.description && <p className="mt-1.5 whitespace-pre-wrap text-slate-600 dark:text-slate-300">{s.description}</p>}
-                      </div>
-                      {(s.proof_urls?.length ?? 0) > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {s.proof_urls!.map((u, i) =>
-                            s.evidence_type === "video" || !/\.(jpe?g|png|webp|gif)($|\?)/i.test(u) && u.startsWith("http") && !u.includes("/storage/") ? (
-                              <a key={i} href={u} target="_blank" className="rounded-xl bg-brand-50 px-4 py-2 text-sm font-bold text-brand-600 hover:bg-brand-100 dark:bg-brand-500/10">▶ Watch video proof ↗</a>
-                            ) : (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <a key={i} href={u} target="_blank"><img src={u} alt={`Proof ${i + 1}`} className="h-36 rounded-xl border border-slate-200 object-cover dark:border-white/10" /></a>
-                            )
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => decide(s.id, true)} className="pj-btn-primary px-4 py-2">Approve &amp; Pay</button>
-                      <button onClick={() => decide(s.id, false)} className="pj-btn-ghost px-4 py-2">Reject</button>
-                    </div>
-                  </div>
+              <p className="text-sm text-slate-500">Proofs submitted by clients, awaiting your review.</p>
+              {subList(subsProcess, true, "No proofs awaiting review ✅")}
+            </div>
+          )}
+          {section === "success" && subList(subsSuccess, false, "No completed jobs yet ✅")}
+          {section === "rejected" && subList(subsRejected, false, "No rejected submissions ❌")}
+
+          {section === "marketplace" && (
+            <div>
+              <div className="mb-2 rounded-xl bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">👀 View-only — this is what community members see. Vendors can&apos;t take jobs.</div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {["All", ...PLATFORMS].map((p) => (
+                  <button key={p} onClick={() => { setMpPlatform(p); setMpJobType("Semua"); }} className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${mpPlatform === p ? "bg-brand-gradient text-white shadow-glow-sm" : "border border-slate-200 bg-white/70 text-slate-600 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-300"}`}>
+                    {ICON_KEY[p] && <PlatformIcon name={ICON_KEY[p]} size={20} />}{p}
+                  </button>
+                ))}
+              </div>
+              {mpPlatform !== "All" && jobTypesFor(mpPlatform).length > 0 && (
+                <div className="mb-5 flex flex-wrap gap-1.5">
+                  {["Semua", ...jobTypesFor(mpPlatform)].map((t) => (
+                    <button key={t} onClick={() => setMpJobType(t)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${mpJobType === t ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "border border-slate-200 bg-white/70 text-slate-500 hover:bg-white dark:border-white/10 dark:bg-white/5"}`}>{t}</button>
+                  ))}
                 </div>
-              ))}
+              )}
+              {mkShown.length === 0 ? <p className="pj-card p-12 text-center text-slate-400">No jobs on the marketplace right now.</p> : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {mkShown.map((j) => (
+                    <div key={j.id} className="pj-card flex flex-col p-5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">{ICON_KEY[j.platform] && <PlatformIcon name={ICON_KEY[j.platform]} size={16} />}{j.platform}</span>
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10">Available</span>
+                      </div>
+                      <h3 className="mt-3 line-clamp-2 font-bold leading-snug">{j.title}</h3>
+                      {j.job_type && <div className="mt-1"><span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold text-brand-600 dark:bg-brand-500/10">{j.job_type}</span></div>}
+                      <div className="mt-2 space-y-1 text-xs text-slate-500">
+                        <p>📅 {formatDateRange(j.starts_at, j.deadline)}</p>
+                        <p>🕐 {formatTimeRange(j.starts_at, j.deadline, j.all_day)}</p>
+                      </div>
+                      {j.description && <p className="mt-2 line-clamp-2 text-sm text-slate-500">{j.description}</p>}
+                      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm text-slate-600 dark:text-slate-300">
+                        <span>👥 Slot: {j.taken}/{j.quota}</span>
+                        <span>💰 <b className="text-gradient">{rm(j.reward)}</b></span>
+                        <span>{j.evidence_type === "video" ? "🎬 Video" : "📷 Image"}</span>
+                        <span className="text-slate-400">by {j.vendor_name}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {section === "clients" && (
+            <div className="pj-card overflow-x-auto p-0">
+              {clientReport.length === 0 ? <p className="p-10 text-center text-slate-400">No client activity yet.</p> : (
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-white/10">
+                      <th className="px-5 py-3.5">Client</th><th className="px-5 py-3.5">Total Jobs</th>
+                      <th className="px-5 py-3.5">⏳ Pending</th><th className="px-5 py-3.5">🔄 Process</th>
+                      <th className="px-5 py-3.5">✅ Success</th><th className="px-5 py-3.5">❌ Failed</th>
+                      <th className="px-5 py-3.5">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientReport.map((c) => (
+                      <tr key={c.client_id} className="border-b border-slate-50 last:border-0 dark:border-white/5">
+                        <td className="px-5 py-3.5"><p className="font-semibold">{c.client_name}</p>{c.client_whatsapp && <p className="text-xs text-slate-400">{c.client_whatsapp}</p>}</td>
+                        <td className="px-5 py-3.5 font-bold">{c.total_jobs}</td>
+                        <td className="px-5 py-3.5">{c.total_pending}</td>
+                        <td className="px-5 py-3.5">{c.total_process}</td>
+                        <td className="px-5 py-3.5 font-semibold text-brand-600">{c.total_success}</td>
+                        <td className="px-5 py-3.5 text-rose-500">{c.total_failed}</td>
+                        <td className="px-5 py-3.5 font-bold text-gradient">{rm(c.total_commission)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold dark:border-white/10 dark:bg-white/5">
+                      <td className="px-5 py-3.5">Total ({clientReport.length} clients)</td>
+                      <td className="px-5 py-3.5">{clientReport.reduce((a, c) => a + c.total_jobs, 0)}</td>
+                      <td className="px-5 py-3.5">{clientReport.reduce((a, c) => a + c.total_pending, 0)}</td>
+                      <td className="px-5 py-3.5">{clientReport.reduce((a, c) => a + c.total_process, 0)}</td>
+                      <td className="px-5 py-3.5 text-brand-600">{clientReport.reduce((a, c) => a + c.total_success, 0)}</td>
+                      <td className="px-5 py-3.5 text-rose-500">{clientReport.reduce((a, c) => a + c.total_failed, 0)}</td>
+                      <td className="px-5 py-3.5 text-gradient">{rm(clientReport.reduce((a, c) => a + Number(c.total_commission), 0))}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
 
