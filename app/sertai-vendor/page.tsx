@@ -13,7 +13,7 @@ const BENEFITS = [
   { icon: "📊", title: "Full Control", body: "Set quota, reward, evidence type, deadline & instructions. Approve or reject every submission." },
   { icon: "💸", title: "Pay Per Campaign", body: "No subscription. Pay only for the jobs you publish — with a transparent quotation upfront." },
 ];
-const STEPS_HOW = ["Register your company (free)", "Create a job & get an instant quotation", "Pay & upload your receipt", "Admin approves → your job goes live", "Review proofs & approve to release rewards"];
+const STEPS_HOW = ["Register your company (free)", "Admin reviews & approves your account", "Create jobs — they go live instantly", "Review & approve worker proofs", "After a campaign expires, pay the invoice (delivered × reward + fee)"];
 
 export default function SertaiVendor() {
   const [open, setOpen] = useState(false);

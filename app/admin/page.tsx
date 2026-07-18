@@ -21,6 +21,7 @@ const GROUPS = [
     { key: "klien-withdraw", icon: "🏦", label: "Laporan Pengeluaran" },
   ]},
   { label: "Vendor (Bisnes)", items: [
+    { key: "vendor-approvals", icon: "🆕", label: "Vendor Approvals" },
     { key: "vendor", icon: "📣", label: "Senarai Vendor" },
     { key: "vendor-tugasan", icon: "📋", label: "Laporan Tugasan" },
     { key: "vendor-komisen", icon: "💰", label: "Laporan Komisyen" },
@@ -67,6 +68,16 @@ export default function Admin() {
 
   const [dailyFees, setDailyFees] = useState<{ day: string; total: number }[]>([]);
   const [outstanding, setOutstanding] = useState(0);
+  const [pendingVendors, setPendingVendors] = useState<Row[]>([]);
+
+  async function approveVendor(id: string, approve: boolean) {
+    if (!supabase) return;
+    if (!approve && !confirm("Reject this vendor application?")) return;
+    const { error } = await supabase.rpc("admin_approve_vendor", { p_id: id, p_approve: approve });
+    if (error) return flash("❌ " + error.message);
+    flash(approve ? "✅ Vendor approved" : "Vendor rejected");
+    setPendingVendors((v) => v.filter((x) => x.id !== id));
+  }
 
   // vendor payments + fee
   const [payments, setPayments] = useState<Row[]>([]);
@@ -166,6 +177,7 @@ export default function Admin() {
         else if (section === "klien-withdraw") setReport(((await supabase.rpc("admin_withdrawal_report", { p_role: "user" })).data as Row[]) ?? []);
         else if (section === "vendor-withdraw") setReport(((await supabase.rpc("admin_withdrawal_report", { p_role: "vendor" })).data as Row[]) ?? []);
         else if (section === "submissions") setSubs(((await supabase.from("submissions").select("*").eq("status", "pending").order("created_at", { ascending: false })).data as Sub[]) ?? []);
+        else if (section === "vendor-approvals") setPendingVendors(((await supabase.rpc("admin_pending_vendors")).data as Row[]) ?? []);
         else if (section === "payments") setPayments(((await supabase.rpc("admin_vendor_payments")).data as Row[]) ?? []);
         else if (section === "settings") { const fp = await supabase.rpc("get_fee_pct"); if (typeof fp.data === "number") setFeePct(String(fp.data)); }
       } finally { setLoadingReport(false); }
@@ -420,6 +432,30 @@ export default function Admin() {
           )}
 
           {/* SMS */}
+          {section === "vendor-approvals" && (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">New vendor registrations awaiting approval. Approve to unlock their vendor panel.</p>
+              {loadingReport ? <p className="pj-card p-10 text-center text-slate-400">Memuatkan…</p> : pendingVendors.length === 0 ? (
+                <p className="pj-card p-12 text-center text-slate-400">No pending vendor applications ✅</p>
+              ) : pendingVendors.map((v) => (
+                <div key={String(v.id)} className="pj-card p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="font-bold">🏢 {fmt(v.company_name ?? v.full_name)}</p>
+                      <p className="mt-1 text-sm text-slate-500">{fmt(v.company_address)}</p>
+                      <p className="text-sm text-slate-500">{fmt(v.company_district)}, {fmt(v.company_state)}</p>
+                      <p className="mt-1 text-xs text-slate-400">📱 {fmt(v.whatsapp)} · applied {fmt(v.created_at, "dt")}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => approveVendor(String(v.id), true)} className="pj-btn-primary px-4 py-2">Approve</button>
+                      <button onClick={() => approveVendor(String(v.id), false)} className="pj-btn-ghost px-4 py-2">Reject</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {section === "payments" && (
             <div className="space-y-3">
               <p className="text-sm text-slate-500">Expired jobs with an invoice. Verify the vendor&apos;s payment receipt to confirm.</p>

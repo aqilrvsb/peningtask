@@ -36,6 +36,7 @@ function rm(n: unknown) { return "RM " + Number(n || 0).toFixed(2); }
 export default function VendorPanel() {
   const supabase = useMemo(() => (hasSupabase ? createClient() : null), []);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [pending, setPending] = useState(false);
   const [section, setSection] = useState("dashboard");
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -76,8 +77,9 @@ export default function VendorPanel() {
     if (!supabase) return;
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) { window.location.href = "/log-masuk"; return; }
-    const { data: prof } = await supabase.from("profiles").select("role,wallet_balance,business_name,avatar_url").eq("id", auth.user.id).single();
+    const { data: prof } = await supabase.from("profiles").select("role,business_name,avatar_url,vendor_approved").eq("id", auth.user.id).single();
     if (!prof || !["vendor", "admin"].includes(prof.role)) { setAllowed(false); return; }
+    if (prof.role === "vendor" && !prof.vendor_approved) { setAllowed(false); setPending(true); setBizName(prof.business_name ?? ""); return; }
     setAllowed(true);
     setBizName(prof.business_name ?? "");
     setLogoUrl(prof.avatar_url ?? null);
@@ -179,6 +181,23 @@ export default function VendorPanel() {
 
   const dueCount = campaigns.filter((c) => c.expired && c.delivered > 0 && c.payment_status !== "paid").length;
   const activeLabel = NAV.find((n) => n.key === section)?.label ?? "";
+
+  if (pending)
+    return (
+      <div className="grid min-h-screen place-items-center px-4">
+        <div className="pj-card max-w-md p-8 text-center">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-amber-100 text-3xl dark:bg-amber-500/15">⏳</div>
+          <h1 className="mt-4 text-xl font-extrabold">Waiting for Admin Approval</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Thanks for registering{bizName ? `, ${bizName}` : ""}! Your vendor account is under review. You&apos;ll be notified once an admin approves it — then all vendor features unlock.
+          </p>
+          <div className="mt-5 flex flex-col gap-2">
+            <button onClick={() => load()} className="pj-btn-ghost py-2.5">🔄 Check status</button>
+            <button onClick={async () => { if (supabase) await supabase.auth.signOut(); window.location.href = "/log-masuk"; }} className="text-sm text-slate-500 hover:underline">Log out</button>
+          </div>
+        </div>
+      </div>
+    );
 
   if (allowed === false)
     return (

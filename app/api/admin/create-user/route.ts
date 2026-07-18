@@ -43,6 +43,10 @@ export async function POST(req: Request) {
     });
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
 
+    // admin-created vendors are auto-approved
+    if (role === "vendor" && created.user?.id) {
+      await admin.from("profiles").update({ vendor_approved: true }).eq("id", created.user.id);
+    }
     if (phone) await admin.from("phone_verifications").delete().eq("phone", phone);
     return NextResponse.json({ ok: true, id: created.user?.id });
   } catch {
