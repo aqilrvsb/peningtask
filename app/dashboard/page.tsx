@@ -204,7 +204,6 @@ export default function Dashboard() {
     flash(error ? "❌ " + error.message : "✅ Settings saved"); if (!error) load();
   }
 
-  const xpInLevel = (profile?.xp ?? 0) % 100;
   const shownJobs = mpPlatform === "All" ? jobs : jobs.filter((j) => j.platform === mpPlatform);
 
   // 14-day earnings series (positive txns grouped by day)
@@ -375,23 +374,8 @@ export default function Dashboard() {
           <>
           {section === "dashboard" && (
             <div className="space-y-6">
-              {/* top row — balance + charts (reference layout) */}
-              <div className="grid gap-4 lg:grid-cols-3">
-                <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow">
-                  <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/80">Account Balance</p>
-                  <p className="mt-2 text-4xl font-extrabold tracking-tight">{rm(profile?.wallet_balance)}</p>
-                  <div className="mt-5 flex gap-2">
-                    <button onClick={() => setSection("marketplace")} className="grid h-11 w-11 place-items-center rounded-xl bg-white/20 text-lg backdrop-blur transition hover:bg-white/30" title="Browse jobs">🛒</button>
-                    <button onClick={() => setSection("wallet")} className="grid h-11 w-11 place-items-center rounded-xl bg-white/20 text-lg backdrop-blur transition hover:bg-white/30" title="Wallet">👛</button>
-                    <button onClick={() => setSection("withdraw")} className="ml-auto rounded-xl bg-white px-4 py-2 text-sm font-bold text-brand-600 transition hover:scale-[1.03]">Withdraw</button>
-                  </div>
-                  <div className="mt-4">
-                    <div className="flex justify-between text-[11px] text-white/75"><span>Level {profile?.level ?? 1} ⭐</span><span>{xpInLevel}/100 XP</span></div>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${xpInLevel}%` }} /></div>
-                  </div>
-                </div>
-
+              {/* top row — charts (reference layout) */}
+              <div className="grid gap-4 lg:grid-cols-2">
                 {/* earnings chart — single series, brand hue */}
                 <div className="pj-card p-5">
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Earnings · last 14 days</p>
