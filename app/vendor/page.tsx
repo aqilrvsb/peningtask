@@ -427,9 +427,27 @@ export default function VendorPanel() {
               <input value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} placeholder="https://www.tiktok.com/@your_account" className="mt-1 w-full rounded-xl px-4 py-2.5" />
               <label className="mt-4 block text-sm font-medium">Instructions *</label>
               <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={6} placeholder={"1. Open the job link\n2. Follow the account\n3. Screenshot as proof"} className="mt-1 w-full rounded-xl px-4 py-2.5 text-sm" />
-              <label className="mt-4 block text-sm font-medium">Evidence Examples (images, optional)</label>
-              <input type="file" accept="image/*" multiple onChange={(e) => setExampleFiles(Array.from(e.target.files ?? []))} className="mt-1 w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm dark:border-white/10" />
-              {exampleFiles.length > 0 && <p className="mt-1 text-xs text-brand-500">✓ {exampleFiles.length} image(s) selected (auto-compressed)</p>}
+              <label className="mt-4 block text-sm font-medium">Evidence Examples <span className="font-normal text-slate-400">(optional, max 5)</span></label>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {exampleFiles.map((f, i) => (
+                  <div key={i} className="group relative h-24 w-24 overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={URL.createObjectURL(f)} alt={`Example ${i + 1}`} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 text-[10px] font-bold text-white">{i + 1}</span>
+                    <button type="button" onClick={() => setExampleFiles((cur) => cur.filter((_, idx) => idx !== i))} className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/60 text-xs text-white transition hover:bg-rose-500 sm:opacity-0 sm:group-hover:opacity-100">✕</button>
+                  </div>
+                ))}
+                {exampleFiles.length < 5 && (
+                  <label className="grid h-24 w-24 cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 transition hover:border-brand-400 hover:text-brand-500 dark:border-white/15">
+                    <div className="text-center">
+                      <div className="text-2xl leading-none">＋</div>
+                      <div className="mt-1 text-[10px] font-semibold">Add ({exampleFiles.length}/5)</div>
+                    </div>
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { setExampleFiles((cur) => [...cur, ...Array.from(e.target.files ?? [])].slice(0, 5)); e.target.value = ""; }} />
+                  </label>
+                )}
+              </div>
+              {exampleFiles.length > 0 && <p className="mt-1 text-xs text-brand-500">✓ {exampleFiles.length}/5 selected — auto-compressed on publish</p>}
               <div className="mt-5 space-y-1 rounded-xl bg-slate-50 p-4 text-sm dark:bg-white/5">
                 <p className="mb-1 font-bold">Estimated quotation (max)</p>
                 <div className="flex justify-between"><span className="text-slate-500">Rewards ({count} × {rm(reward)})</span><span>{rm(total)}</span></div>
