@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Logo } from "@/components/site";
 import { createClient, hasSupabase } from "@/lib/supabase";
+import { normalizePhone } from "@/lib/phone";
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
@@ -20,12 +21,15 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      // resolve email-or-phone → account email, then sign in client-side
-      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
-      const j = await res.json();
-      if (!j.ok || !j.email) { setLoading(false); setMsg(j.error || "Emel/telefon atau kata laluan salah."); return; }
       const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({ email: j.email, password });
+      // email or phone: if phone, resolve to the account email via RPC
+      let email = identifier.trim();
+      if (!email.includes("@")) {
+        const { data: em } = await supabase.rpc("email_for_phone", { p_phone: normalizePhone(identifier) });
+        if (!em) { setLoading(false); setMsg("Emel/telefon atau kata laluan salah."); return; }
+        email = em as string;
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data.user) { setLoading(false); setMsg("Emel/telefon atau kata laluan salah."); return; }
       const { data: prof } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
       const dest = prof?.role === "admin" ? "/admin" : prof?.role === "vendor" ? "/vendor" : "/dashboard";
