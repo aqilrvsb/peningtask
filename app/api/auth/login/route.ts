@@ -1,46 +1,26 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { createAdminClient, normalizePhone } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-// Login with EMAIL or PHONE. If the identifier isn't an email, resolve the phone
-// to its account's email, then verify the password server-side and hand the
-// browser a session to set.
+// Resolve an email-or-phone identifier to an account email. The browser then
+// signs in with that email + password (using the working client-side session).
 export async function POST(req: Request) {
   try {
-    const { identifier, password } = await req.json();
+    const { identifier } = await req.json();
     const id = String(identifier || "").trim();
-    if (!id || !password) return NextResponse.json({ ok: false, error: "Emel/telefon & kata laluan diperlukan." }, { status: 400 });
+    if (!id) return NextResponse.json({ ok: false, error: "Emel/telefon diperlukan." }, { status: 400 });
 
-    let email = id;
-    if (!id.includes("@")) {
-      // treat as phone → look up the account's email
-      const phone = normalizePhone(id);
-      const admin = createAdminClient();
-      const { data: prof } = await admin.from("profiles").select("id").eq("whatsapp", phone).maybeSingle();
-      if (!prof) return NextResponse.json({ ok: false, error: "Emel/telefon atau kata laluan salah." }, { status: 400 });
-      const { data: u } = await admin.auth.admin.getUserById(prof.id);
-      if (!u?.user?.email) return NextResponse.json({ ok: false, error: "Emel/telefon atau kata laluan salah." }, { status: 400 });
-      email = u.user.email;
-    }
+    if (id.includes("@")) return NextResponse.json({ ok: true, email: id });
 
-    // verify credentials server-side (service key works as the project apikey;
-    // the password grant authenticates the user and returns their session)
-    const authClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
-    const { data, error } = await authClient.auth.signInWithPassword({ email, password });
-    if (error || !data.session) return NextResponse.json({ ok: false, error: "Emel/telefon atau kata laluan salah." }, { status: 400 });
-
-    // role for post-login routing
+    // treat as phone → find the account's email
+    const phone = normalizePhone(id);
     const admin = createAdminClient();
-    const { data: prof } = await admin.from("profiles").select("role").eq("id", data.user!.id).single();
-
-    return NextResponse.json({
-      ok: true,
-      role: prof?.role ?? "user",
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token,
-    });
+    const { data: prof } = await admin.from("profiles").select("id").eq("whatsapp", phone).maybeSingle();
+    if (!prof) return NextResponse.json({ ok: false, error: "Emel/telefon atau kata laluan salah." }, { status: 400 });
+    const { data: u } = await admin.auth.admin.getUserById(prof.id);
+    if (!u?.user?.email) return NextResponse.json({ ok: false, error: "Emel/telefon atau kata laluan salah." }, { status: 400 });
+    return NextResponse.json({ ok: true, email: u.user.email });
   } catch {
     return NextResponse.json({ ok: false, error: "Ralat tidak dijangka." }, { status: 500 });
   }

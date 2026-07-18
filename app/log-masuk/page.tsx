@@ -20,13 +20,15 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      // resolve email-or-phone + verify password server-side, get a session
-      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, password }) });
+      // resolve email-or-phone → account email, then sign in client-side
+      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
       const j = await res.json();
-      if (!j.ok) { setLoading(false); setMsg(j.error || "Log masuk gagal."); return; }
+      if (!j.ok || !j.email) { setLoading(false); setMsg(j.error || "Emel/telefon atau kata laluan salah."); return; }
       const supabase = createClient();
-      await supabase.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
-      const dest = j.role === "admin" ? "/admin" : j.role === "vendor" ? "/vendor" : "/dashboard";
+      const { data, error } = await supabase.auth.signInWithPassword({ email: j.email, password });
+      if (error || !data.user) { setLoading(false); setMsg("Emel/telefon atau kata laluan salah."); return; }
+      const { data: prof } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      const dest = prof?.role === "admin" ? "/admin" : prof?.role === "vendor" ? "/vendor" : "/dashboard";
       window.location.href = dest;
     } catch { setLoading(false); setMsg("Ralat rangkaian."); }
   }
