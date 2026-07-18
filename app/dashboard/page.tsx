@@ -5,6 +5,7 @@ import { Logo } from "@/components/site";
 import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
+import { formatDuration } from "@/lib/duration";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Profile = {
@@ -19,6 +20,7 @@ type Job = {
   id: number; platform: string; title: string; description: string | null; reward: number;
   quota: number; taken: number; duration_min: number | null; evidence_type: string;
   claim_mode: string; per_user_quota: number; deadline: string | null; target_url: string | null;
+  starts_at: string | null; all_day: boolean;
   example_urls: string[]; vendor_name: string | null; vendor_logo: string | null; created_at: string;
 };
 type MyJob = { submission_id: number; task_id: number; platform: string; action: string; reward: number; status: string; proof: string | null; proof_url: string | null; reject_reason: string | null; target_url: string | null; evidence_type: string; vendor_name: string | null; created_at: string };
@@ -456,7 +458,7 @@ export default function Dashboard() {
                         <span>👥 Slot: {j.taken}/{j.quota}</span>
                         <span>{j.evidence_type === "video" ? "🎬 Video" : "📷 Image"}</span>
                       </div>
-                      <p className="mt-2 text-xs text-slate-400">🕐 {new Date(j.created_at).toLocaleString("en-MY", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "numeric", minute: "2-digit" })}</p>
+                      <p className="mt-2 text-xs text-slate-400">📆 {formatDuration(j.starts_at, j.deadline, j.all_day)}</p>
                       <div className="mt-4 grid grid-cols-2 gap-2">
                         <button onClick={() => setJobDetail(j)} className="pj-btn-ghost py-2.5">View Details</button>
                         <button onClick={() => acceptJob(j)} className="pj-btn-primary py-2.5">Take Job</button>
@@ -512,7 +514,7 @@ export default function Dashboard() {
                       ["⏱️ Est. Time", jobDetail.duration_min ? `${jobDetail.duration_min} min` : "—"],
                       ["📄 Proof Type", jobDetail.evidence_type === "video" ? "Video" : "Image"],
                       ["🔁 Claim", jobDetail.claim_mode === "multi" ? `Up to ${jobDetail.per_user_quota}× per user` : "One time per user"],
-                      ...(jobDetail.deadline ? [["📅 Deadline", new Date(jobDetail.deadline).toLocaleString("en-MY")]] as [string, string][] : []),
+                      ...(jobDetail.deadline ? [["📆 Duration", formatDuration(jobDetail.starts_at, jobDetail.deadline, jobDetail.all_day)]] as [string, string][] : []),
                     ].map(([k, v], i) => (
                       <div key={i} className="flex items-center justify-between border-b border-slate-100 py-2.5 text-sm last:border-0 dark:border-white/5">
                         <span className="text-slate-500">{k}</span><span className="font-semibold">{v}</span>

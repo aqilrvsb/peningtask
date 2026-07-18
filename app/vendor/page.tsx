@@ -6,11 +6,12 @@ import { Logo } from "@/components/site";
 import { PlatformIcon } from "@/components/icons";
 import { TicketCenter } from "@/components/tickets";
 import { compressImage } from "@/lib/compress";
+import { formatDuration, klISO } from "@/lib/duration";
 import { createClient, hasSupabase } from "@/lib/supabase";
 
 type Campaign = {
   id: number; platform: string; title: string | null; quantity: number; delivered: number;
-  reward_each: number; fee_pct: number; deadline: string | null; expired: boolean;
+  reward_each: number; fee_pct: number; deadline: string | null; starts_at: string | null; all_day: boolean; expired: boolean;
   invoice: number; invoice_fee: number; invoice_total: number;
   payment_status: string; receipt_url: string | null; admin_reject_reason: string | null; created_at: string;
 };
@@ -55,7 +56,13 @@ export default function VendorPanel() {
   const [jobName, setJobName] = useState("");
   const [reward, setReward] = useState(0.1);
   const [count, setCount] = useState(20);
-  const [deadline, setDeadline] = useState("");
+  // duration (Kuala Lumpur timezone)
+  const [dateMode, setDateMode] = useState<"single" | "range">("single");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [timeMode, setTimeMode] = useState<"allday" | "time">("allday");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("18:00");
   const [durationMin, setDurationMin] = useState(5);
   const [evidenceType, setEvidenceType] = useState<"image" | "video">("image");
   const [claimMode, setClaimMode] = useState<"once" | "multi">("once");
@@ -100,7 +107,17 @@ export default function VendorPanel() {
     if (!supabase) return;
     if (!jobName.trim()) return flash("⚠️ Enter the job name");
     if (!instructions.trim()) return flash("⚠️ Write the job instructions");
-    if (!deadline) return flash("⚠️ Set an expiry date");
+    // --- duration (Kuala Lumpur) ---
+    if (!startDate) return flash(dateMode === "range" ? "⚠️ Set the start date" : "⚠️ Set the job date");
+    const eDate = dateMode === "single" ? startDate : endDate;
+    if (dateMode === "range" && !eDate) return flash("⚠️ Set the end date");
+    const allDay = timeMode === "allday";
+    const startsAtISO = klISO(startDate, allDay ? "00:00" : startTime);
+    const deadlineISO = klISO(eDate, allDay ? "23:59" : endTime);
+    const startsAt = new Date(startsAtISO), endsAt = new Date(deadlineISO);
+    if (isNaN(startsAt.getTime()) || isNaN(endsAt.getTime())) return flash("⚠️ Invalid date/time");
+    if (endsAt <= new Date()) return flash("⚠️ Duration end must be in the future");
+    if (endsAt < startsAt) return flash("⚠️ End must be after the start");
     setBusy(true);
     const { data: auth } = await supabase.auth.getUser();
     const exampleUrls: string[] = [];
@@ -117,14 +134,15 @@ export default function VendorPanel() {
       p_evidence_type: evidenceType, p_claim_mode: claimMode,
       p_per_user_quota: claimMode === "multi" ? perUserQuota : 1,
       p_duration_min: durationMin || null,
-      p_deadline: new Date(deadline).toISOString(),
+      p_deadline: deadlineISO,
       p_instructions: instructions, p_target_url: targetUrl || null, p_example_urls: exampleUrls,
       p_auto_release_hours: autoRelease,
+      p_starts_at: startsAtISO, p_all_day: allDay,
     });
     setBusy(false);
     if (error) return flash("❌ " + error.message);
     flash("✅ Job is now live on the marketplace!");
-    setJobName(""); setInstructions(""); setTargetUrl(""); setExampleFiles([]); setDeadline("");
+    setJobName(""); setInstructions(""); setTargetUrl(""); setExampleFiles([]); setStartDate(""); setEndDate("");
     load(); setSection("jobs");
   }
 
@@ -318,9 +336,49 @@ export default function VendorPanel() {
                   <input type="number" min="1" value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className="mt-1 w-full rounded-xl px-4 py-2.5" />
                 </div>
               </div>
-              <label className="mt-4 block text-sm font-medium">Expiry Date *</label>
-              <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
-              <p className="mt-1 text-xs text-slate-400">After this date the job leaves the marketplace and an invoice is generated for the work delivered.</p>
+              <div className="mt-4 flex items-center justify-between">
+                <label className="block text-sm font-medium">Duration *</label>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-white/10">🕐 Timezone: Kuala Lumpur (GMT+8)</span>
+              </div>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {([["single", "📅 Single date"], ["range", "🗓️ Date range"]] as const).map(([k, l]) => (
+                  <label key={k} className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 p-2.5 text-sm font-bold ${dateMode === k ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 dark:border-white/10"}`}>
+                    <input type="radio" name="datemode" checked={dateMode === k} onChange={() => setDateMode(k)} className="accent-pink-600" />{l}
+                  </label>
+                ))}
+              </div>
+              <div className={`mt-2 grid gap-2 ${dateMode === "range" ? "grid-cols-2" : "grid-cols-1"}`}>
+                <div>
+                  <label className="block text-xs text-slate-500">{dateMode === "range" ? "Start date" : "Date"}</label>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+                </div>
+                {dateMode === "range" && (
+                  <div>
+                    <label className="block text-xs text-slate-500">End date</label>
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {([["allday", "🌤️ All day"], ["time", "⏰ Specific time"]] as const).map(([k, l]) => (
+                  <label key={k} className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 p-2.5 text-sm font-bold ${timeMode === k ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-200 dark:border-white/10"}`}>
+                    <input type="radio" name="timemode" checked={timeMode === k} onChange={() => setTimeMode(k)} className="accent-pink-600" />{l}
+                  </label>
+                ))}
+              </div>
+              {timeMode === "time" && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-slate-500">Start time</label>
+                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500">End time</label>
+                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1 w-full rounded-xl px-4 py-2.5" />
+                  </div>
+                </div>
+              )}
+              <p className="mt-1 text-xs text-slate-400">After the end date the job leaves the marketplace and an invoice is generated for the work delivered.</p>
               <label className="mt-4 block text-sm font-medium">Evidence Type *</label>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 {([["image", "📷 By Images"], ["video", "🎬 By Video URL"]] as const).map(([k, l]) => (
@@ -418,7 +476,7 @@ export default function VendorPanel() {
                   <thead>
                     <tr className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-white/10">
                       <th className="px-5 py-3.5">Job</th><th className="px-5 py-3.5">Platform</th><th className="px-5 py-3.5">Progress</th>
-                      <th className="px-5 py-3.5">Escrow Left</th><th className="px-5 py-3.5">Fee Paid</th><th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5">Duration (KL)</th><th className="px-5 py-3.5">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -432,7 +490,7 @@ export default function VendorPanel() {
                             <span className="text-xs text-slate-500">{c.delivered}/{c.quantity}</span>
                           </div>
                         </td>
-                        <td className="px-5 py-3.5 text-xs text-slate-500">{c.deadline ? new Date(c.deadline).toLocaleString("en-MY") : "—"}</td>
+                        <td className="px-5 py-3.5 text-xs text-slate-500">{formatDuration(c.starts_at, c.deadline, c.all_day)}</td>
                         <td className="px-5 py-3.5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:bg-emerald-500/10">Live</span></td>
                       </tr>
                     ))}

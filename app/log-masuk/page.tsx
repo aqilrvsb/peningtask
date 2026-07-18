@@ -20,10 +20,17 @@ export default function LoginPage() {
     }
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { setLoading(false); setMsg(error.message); return; }
+    // route by role: admin → /admin, vendor → /vendor, else client dashboard
+    let dest = "/dashboard";
+    if (data.user) {
+      const { data: prof } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      if (prof?.role === "admin") dest = "/admin";
+      else if (prof?.role === "vendor") dest = "/vendor";
+    }
     setLoading(false);
-    if (error) setMsg(error.message);
-    else window.location.href = "/dashboard";
+    window.location.href = dest;
   }
 
   return (
